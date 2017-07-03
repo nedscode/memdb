@@ -89,9 +89,9 @@ before data gets stored. Attempt to set index fields after use will cause a pani
 Saving items into the store is simple:
 
 ```golang
-	mdb.Store(&car{make: "Ford", model: "Fiesta", rrp: 27490})
-	mdb.Store(&car{make: "Holden", model: "Astra", rrp: 24190})
-	mdb.Store(&car{make: "Honda", model: "Jazz", rrp: 19790})
+	mdb.Put(&car{make: "Ford", model: "Fiesta", rrp: 27490})
+	mdb.Put(&car{make: "Holden", model: "Astra", rrp: 24190})
+	mdb.Put(&car{make: "Honda", model: "Jazz", rrp: 19790})
 ```
 
 ## Retrieving an item

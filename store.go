@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-// Store implements an indexed storage for an Indexer item
+// Put implements an indexed storage for an Indexer item
 //
 // Bad things happen if the item's indexed fields change mid-flight. Care should be taken to always return the same
 // value for fields [ie: Indexer.GetField(field)] as when first stored, even if they are changed, or else delete the
@@ -149,8 +149,8 @@ func (s *Store) Expire() {
 	}
 }
 
-// Store places an indexer item into the store
-func (s *Store) Store(indexer Indexer) {
+// Put places an indexer item into the store
+func (s *Store) Put(indexer Indexer) {
 	s.Lock()
 	defer s.Unlock()
 

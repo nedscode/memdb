@@ -46,14 +46,14 @@ func TestCreateAfterStore(t *testing.T) {
 	}()
 
 	s := NewStore()
-	s.Store(&X{})
+	s.Put(&X{})
 	s.CreateField("b")
 }
 
 func TestGet(t *testing.T) {
 	s := NewStore()
 	orig := &X{a: 1}
-	s.Store(orig)
+	s.Put(orig)
 	v := s.Get(&X{a: 1})
 	if orig != v {
 		t.Errorf("Gotten value should be same as original instance")
@@ -63,7 +63,7 @@ func TestGet(t *testing.T) {
 func TestNoGet(t *testing.T) {
 	s := NewStore()
 	orig := &X{a: 1}
-	s.Store(orig)
+	s.Put(orig)
 	v := s.Get(&X{a: 2})
 	if v != nil {
 		t.Errorf("Gotten value should be nil (not present)")
@@ -73,9 +73,9 @@ func TestNoGet(t *testing.T) {
 func TestLookup(t *testing.T) {
 	s := NewStore()
 	s.CreateField("b")
-	s.Store(&X{a: 1, b: "test"})
-	s.Store(&X{a: 2, b: "test"})
-	s.Store(&X{a: 3, b: "not"})
+	s.Put(&X{a: 1, b: "test"})
+	s.Put(&X{a: 2, b: "test"})
+	s.Put(&X{a: 3, b: "not"})
 	vals := s.Lookup("b", "test")
 	if len(vals) != 2 {
 		t.Errorf("Length of looked up values should be 2 (was %s)", len(vals))
@@ -91,7 +91,7 @@ func TestLookup(t *testing.T) {
 func TestLookupInvalidField(t *testing.T) {
 	s := NewStore()
 	s.CreateField("b")
-	s.Store(&X{a: 1, b: "test"})
+	s.Put(&X{a: 1, b: "test"})
 	vals := s.Lookup("c", "test")
 	if vals != nil {
 		t.Errorf("Lookup of invalid field should be nil (was %#v)", vals)
@@ -101,7 +101,7 @@ func TestLookupInvalidField(t *testing.T) {
 func TestLookupNonPresentKey(t *testing.T) {
 	s := NewStore()
 	s.CreateField("b")
-	s.Store(&X{a: 1, b: "test"})
+	s.Put(&X{a: 1, b: "test"})
 	vals := s.Lookup("b", "dumb")
 	if vals != nil {
 		t.Errorf("Lookup of non-present key should be nil (was %#v)", vals)
@@ -117,10 +117,10 @@ func TestTraverse(t *testing.T) {
 	v4 := &X{a: 4, b: "four:"}
 	v8 := &X{a: 8, b: "eight:"}
 
-	s.Store(v1)
-	s.Store(v2)
-	s.Store(v4)
-	s.Store(v8)
+	s.Put(v1)
+	s.Put(v2)
+	s.Put(v4)
+	s.Put(v8)
 
 	n := s.Len()
 	if n != 4 {
