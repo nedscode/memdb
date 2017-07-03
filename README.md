@@ -55,9 +55,9 @@ func main() {
 		CreateField("make").
 		CreateField("model")
 
-	mdb.Store(&car{make: "Ford", model: "Fiesta", sales: 1375449.73})
-	mdb.Store(&car{make: "Holden", model: "Astra", sales: 8613642.89})
-	mdb.Store(&car{make: "Honda", model: "Jazz", sales: 7899950.33})
+	mdb.Store(&car{make: "Ford", model: "Fiesta"})
+	mdb.Store(&car{make: "Holden", model: "Astra"})
+	mdb.Store(&car{make: "Honda", model: "Jazz"})
 
 	indexers := mdb.Lookup("model", "Astra")
 	for _, indexer := range indexers {
