@@ -1,11 +1,11 @@
 package memdb
 
 import (
-	"testing"
-
 	"github.com/google/btree"
-	"strings"
+
 	"sort"
+	"strings"
+	"testing"
 )
 
 var expired = 0
