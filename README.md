@@ -2,22 +2,34 @@
 
 The memdb library is a simple in-memory store for go structs that allows indexing and storage of items as well as configurable item expiry and collection at an interface level.
 
-## Usage
+## Including
 
-The following simple example demonstrates a use-case example for the database (see example/ folder for a more detailed example):
+To start using, get memdb `go get git.neds.sh/golib/memdb` and include it in your code:
 
 ```golang
-package main
+import "git.neds.sh/golib/memdb"
+```
 
-import (
-	"git.neds.sh/golib/memdb"
-)
+## Defining you storage struct
 
+Define your struct as normal:
+
+```golang
 type car struct {
 	make    string
 	model   string
+	rrp     int
 }
+```
 
+Then add the required methods to support storage in memdb.
+
+We need a comparator function `Less`. If `a.Less(b) == false && b.Less(a) == false`, then the item is determined to be
+ equivalent and the same. Storage of multiple equivalent items will overwrite each other. If you can't figure out the
+ comparison yourself (eg unknown object type), call the Unsure function which will arbitrarily, but consistently
+ determine the order. 
+
+```golang
 func (i *car) Less(other memdb.Indexer) bool {
 	switch o := other.(type) {
 	case *car:
@@ -34,11 +46,21 @@ func (i *car) Less(other memdb.Indexer) bool {
 	}
 	return memdb.Unsure(i, other)
 }
+```
 
+Then we need an expiry function to determine if the item is to be expired or not, for the moment, we don't want any
+items to be expired, so set the function to return false.
+
+```golang
 func (i *car) IsExpired() bool {
 	return false
 }
+```
 
+Finally, we need a function that will return the string values of the indexed fields, all indexed fields are returned
+and stored as strings:
+
+```golang
 func (i *car) GetField(field string) string {
 	switch field {
 	case "make":
@@ -49,27 +71,107 @@ func (i *car) GetField(field string) string {
 		return "" // Indicates should not be indexed
 	}
 }
+```
 
-func main() {
+## Creating a storage instance
+
+To create a storage instance initialise it and set the indexed fields. Indexed fields can only be set at the start
+before data gets stored. Attempt to set index fields after use will cause a panic.
+
+```golang
 	mdb := memdb.NewStore().
 		CreateField("make").
 		CreateField("model")
+```
 
-	mdb.Store(&car{make: "Ford", model: "Fiesta"})
-	mdb.Store(&car{make: "Holden", model: "Astra"})
-	mdb.Store(&car{make: "Honda", model: "Jazz"})
+## Adding items to the store.
 
+Saving items into the store is simple:
+
+```golang
+	mdb.Store(&car{make: "Ford", model: "Fiesta", rrp: 27490})
+	mdb.Store(&car{make: "Holden", model: "Astra", rrp: 24190})
+	mdb.Store(&car{make: "Honda", model: "Jazz", rrp: 19790})
+```
+
+## Retrieving an item
+
+In order to retrieve an item, supply an eqivalent item as a search parameter, you only need to create enough fields in
+the search object to be deemed equivalent by your Less function:
+
+```golang
+	vehicle := mdb.Get(&car{make: "Holden", model: "Astra"}).(*car)
+	fmt.Printf("Vehicle RRP is $%d\n", vehicle.rrp)
+```
+
+## Looking up items by index
+
+This is where it starts to get interesting, we can lookup items by any of our defined indexed fields:
+
+```golang
 	indexers := mdb.Lookup("model", "Astra")
 	for _, indexer := range indexers {
-		fmt.Println(indexer.(*car))
+	    vehicle := indexer.(*car)
+		fmt.Printf("%s %s ($%d rrp)\n", vehicle.make, vehicle.model, vehicle.rrp)
 	}
+```
 
-	fmt.Println(mdb.Get(&car{make: "Holden", model: "Astra"}).(*car))
+## Traversing the database
 
-	fmt.Println("Iterating over all cars, ascending:")
+If you desire to walk the database, you can ascend or descend from the extremities or a certain point using one of the 
+following functions:
+
+ * Ascend(iterator)
+ * Descend(iterator)
+ * AscendStarting(at, iterator)
+ * DescendStarting(at, iterator)
+
+Use the functions by providing an iterator that returns false to stop traversal as follows:
+
+```golang
+	fmt.Println("Iterating over all cars, ascending:\n")
+	count := 0
 	mdb.Ascend(func(indexer memdb.Indexer) bool {
-		fmt.Println(indexer.(*car))
+		vehicle := indexer.(*car)
+		fmt.Printf("%s %s ($%d rrp)\n", vehicle.make, vehicle.model, vehicle.rrp)
+		count++
 		return true
 	})
+	fmt.Println("Found %d cars\n", count)
+```
+
+## Expiry
+
+Item expiry can be achieved by defining an expiry condition function and scheduling the expiry function.
+
+Say we expanded the car struct to have a sold time
+
+```golang
+type car struct {
+	make    string
+	model   string
+	rrp     int
+	sold    time.Time
 }
 ```
+
+Then changed the IsExpired method like:
+
+```golang
+func (i *car) IsExpired() bool {
+	return i.sold.Before(time.Now().Sub(24 * time.Hour))
+}
+```
+
+Then scheduled the Expire function:
+
+```golang
+go func() {
+	tick := time.Tick(30 * time.Minute)
+	for range tick {
+		mdb.Expire()
+	}
+}
+```
+
+Now every 30 minutes, we will expire cars sold more than 24 hours ago from our listings.
