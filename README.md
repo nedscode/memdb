@@ -66,7 +66,7 @@ func main() {
 
 	fmt.Println(mdb.Get(&car{make: "Holden", model: "Astra"}).(*car))
 
-	fmt.Println("Iterating over cars > Nissan:")
+	fmt.Println("Iterating over all cars, ascending:")
 	mdb.Ascend(func(indexer memdb.Indexer) bool {
 		fmt.Println(indexer.(*car))
 		return true
