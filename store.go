@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-// Put implements an indexed storage for an Indexer item
+// Store implements an indexed storage for an Indexer item
 //
 // Bad things happen if the item's indexed fields change mid-flight. Care should be taken to always return the same
 // value for fields [ie: Indexer.GetField(field)] as when first stored, even if they are changed, or else delete the
