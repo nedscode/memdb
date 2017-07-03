@@ -1,0 +1,10 @@
+example/example
+
+.DS_STORE
+*.out
+.idea/
+.vscode/
+debug
+goreportcard.db
+*.test
+sync-*.id
