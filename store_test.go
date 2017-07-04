@@ -115,11 +115,13 @@ func TestLookupNonPresentKey(t *testing.T) {
 func TestTraverse(t *testing.T) {
 	s := NewStore()
 	s.CreateField("b")
-	v1 := &X{a: 1, b: "one:"}
-	v2 := &X{a: 2, b: "two:"}
-	v3 := &X{a: 3, b: "three:"}
-	v4 := &X{a: 4, b: "four:"}
-	v8 := &X{a: 8, b: "eight:"}
+	s.CreateField("c")
+
+	v1 := &X{a: 1, b: "one:", c: "ZZZ"}
+	v2 := &X{a: 2, b: "two:", c: "ZZZ"}
+	v3 := &X{a: 3, b: "three:", c: "ZZZ"}
+	v4 := &X{a: 4, b: "four:", c: "XXX"}
+	v8 := &X{a: 8, b: "eight:", c: "ZZZ"}
 
 	s.Put(v1)
 	s.Put(v2)
@@ -236,6 +238,34 @@ func TestTraverse(t *testing.T) {
 	}
 }
 
+func TestEach(t *testing.T) {
+	s := NewStore()
+	s.CreateField("b")
+	s.CreateField("c")
+
+	v1 := &X{a: 1, b: "one:", c: "ZZZ"}
+	v2 := &X{a: 2, b: "two:", c: "ZZZ"}
+	v3 := &X{a: 3, b: "three:", c: "ZZZ"}
+	v4 := &X{a: 4, b: "four:", c: "XXX"}
+	v8 := &X{a: 8, b: "eight:", c: "ZZZ"}
+
+	s.Put(v1)
+	s.Put(v2)
+	s.Put(v3)
+	s.Put(v4)
+	s.Put(v8)
+
+	total := 0
+	s.In("c").Each(func(i Indexer) bool {
+		total += i.(*X).a
+		return true
+	}, "ZZZ")
+
+	if total != 14 {
+		t.Errorf("Expected total of 14 when adding up matching ZZZ items (got %d)", total)
+	}
+}
+
 func TestNotificates(t *testing.T) {
 	s := NewStore()
 	s.CreateField("b")
@@ -243,8 +273,8 @@ func TestNotificates(t *testing.T) {
 	v2 := &X{a: 1, b: "two:"}
 
 	var expectEvent Event
-	var expectOld Indexer
-	var expectNew Indexer
+	var expectOld, expectNew, expectOne, expectTwo Indexer
+
 	h := func(event Event, old, new Indexer) {
 		if event != expectEvent {
 			t.Errorf("Expected event %#v (got %#v)", expectEvent, event)
@@ -254,6 +284,20 @@ func TestNotificates(t *testing.T) {
 		}
 		if new != expectNew {
 			t.Errorf("Expected %#v new value %#v (got %#v)", event, expectNew, new)
+		}
+		if expectOne == nil {
+			if s.index["b"]["one:"] != nil {
+				t.Errorf("Expected b one: index to be nil")
+			}
+		} else if len(s.index["b"]["one:"]) != 1 || s.index["b"]["one:"][0] != expectOne {
+			t.Errorf("Expected b one: index to be v1")
+		}
+		if expectTwo == nil {
+			if s.index["b"]["two:"] != nil {
+				t.Errorf("Expected b two: index to be nil")
+			}
+		} else if len(s.index["b"]["two:"]) != 1 || s.index["b"]["two:"][0] != expectTwo {
+			t.Errorf("Expected b two: index to be v1")
 		}
 	}
 
@@ -265,27 +309,37 @@ func TestNotificates(t *testing.T) {
 	expectEvent = Insert
 	expectOld = nil
 	expectNew = v1
+	expectOne = v1
+	expectTwo = nil
 	s.Put(v1)
 
 	expectEvent = Update
 	expectOld = v1
 	expectNew = v2
+	expectOne = nil
+	expectTwo = v2
 	s.Put(v2)
 
 	expectEvent = Remove
 	expectOld = v2
 	expectNew = nil
+	expectOne = nil
+	expectTwo = nil
 	s.Delete(v1) // This is a trick as we asked to delete v1, but v2 is actually getting deleted and should be expected
 
 	expectEvent = Insert
 	expectOld = nil
 	expectNew = v1
+	expectOne = v1
+	expectTwo = nil
 	s.Put(v1)
 
 	expired = 1
 	expectEvent = Expiry
 	expectOld = v1
 	expectNew = nil
+	expectOne = nil
+	expectTwo = nil
 	s.Expire()
 
 	expired = 0

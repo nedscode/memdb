@@ -165,6 +165,15 @@ Use the functions by providing an iterator that returns false to stop traversal 
 	fmt.Println("Found %d cars\n", count)
 ```
 
+If you wish to traverse your simple or compound indexed fields, you may also do this via:
+
+```golang
+    mdb.In("make", "model").Each(func(indexer memdb.Indexer) bool {
+		vehicle := indexer.(*car)
+		fmt.Printf("%s %s ($%d rrp)\n", vehicle.make, vehicle.model, vehicle.rrp)
+    }, "Holden", "Astra")
+```
+
 ## Notification
 
 Item notification can be performed via the On(event, callback) method:
