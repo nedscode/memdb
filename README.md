@@ -153,6 +153,21 @@ Use the functions by providing an iterator that returns false to stop traversal 
 	fmt.Println("Found %d cars\n", count)
 ```
 
+## Notification
+
+Item notification can be performed via the On(event, callback) method:
+
+```golang
+    notify := func (event memdb.Event, old, new memdb.Indexer) {
+        fmt.Printf("Got %#v of %#v -> %#v", event, old, new)
+    }
+    
+    mdb.On(memdb.Insert, notify)
+    mdb.On(memdb.Update, notify)
+    mdb.On(memdb.Remove, notify)
+    mdb.On(memdb.Expiry, notify)
+```
+
 ## Expiry
 
 Item expiry can be achieved by defining an expiry condition function and scheduling the expiry function.

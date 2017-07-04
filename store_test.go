@@ -236,6 +236,7 @@ func TestNotificates(t *testing.T) {
 	s := NewStore()
 	s.CreateField("b")
 	v1 := &X{a: 1, b: "one:"}
+	v2 := &X{a: 1, b: "two:"}
 
 	var expectEvent Event
 	var expectOld Indexer
@@ -262,16 +263,15 @@ func TestNotificates(t *testing.T) {
 	expectNew = v1
 	s.Put(v1)
 
-	v1.b = "ZZZ"
 	expectEvent = Update
 	expectOld = v1
-	expectNew = v1
-	s.Put(v1)
+	expectNew = v2
+	s.Put(v2)
 
 	expectEvent = Remove
-	expectOld = v1
+	expectOld = v2
 	expectNew = nil
-	s.Delete(v1)
+	s.Delete(v1) // This is a trick as we asked to delete v1, but v2 is actually getting deleted and should be expected
 
 	expectEvent = Insert
 	expectOld = nil
@@ -283,6 +283,8 @@ func TestNotificates(t *testing.T) {
 	expectOld = v1
 	expectNew = nil
 	s.Expire()
+
+	expired = 0
 }
 
 func TestUnsure(t *testing.T) {
