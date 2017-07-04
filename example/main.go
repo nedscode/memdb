@@ -75,7 +75,7 @@ func main() {
 	mdb.Put(&car{make: "Suzuki", model: "Swift", sales: 6270911.37})
 	mdb.Put(&car{make: "Vauxhall", model: "Astra", sales: 9883699.82})
 
-	indexers := mdb.Lookup("model", "Astra")
+	indexers := mdb.Lookup("Astra", "model")
 	fmt.Println("Found Astra models:")
 	for _, indexer := range indexers {
 		fmt.Println(indexer.(*car).String())
@@ -86,11 +86,18 @@ func main() {
 
 	mdb.Delete(&car{make: "Nissan", model: "Juke"})
 
-	indexers = mdb.Lookup("make", "Nissan")
+	indexers = mdb.Lookup("Nissan", "make")
 	fmt.Println("Found Nissan makes:")
 	for _, indexer := range indexers {
 		fmt.Println(indexer.(*car).String())
 	}
+
+	indexers = mdb.Lookup("Nissan", "make")
+	fmt.Println("Found Nissan makes:")
+	for _, indexer := range indexers {
+		fmt.Println(indexer.(*car).String())
+	}
+
 
 	fmt.Println("Iterating over cars > Nissan:")
 	mdb.AscendStarting(&car{make: "Nissan"}, func(indexer memdb.Indexer) bool {

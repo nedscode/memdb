@@ -5,6 +5,7 @@ import (
 	"github.com/google/btree"
 
 	"sync"
+	"strings"
 )
 
 // Store implements an indexed storage for an Indexer item
@@ -18,8 +19,8 @@ import (
 type Store struct {
 	sync.RWMutex
 
-	fields  []string
 	backing *btree.BTree
+	fields  map[string]*Fields
 	index   map[string]map[string][]Indexer
 	used    bool
 
@@ -27,6 +28,13 @@ type Store struct {
 	updateNotifiers []NotifyFunc
 	removeNotifiers []NotifyFunc
 	expiryNotifiers []NotifyFunc
+}
+
+// Fields represent a list of fields
+type Fields struct {
+	id string
+	list []string
+	store *Store
 }
 
 // Event is a type of event emitted by the class, see the On() method
@@ -54,15 +62,22 @@ func NewStore() *Store {
 	return &Store{
 		backing: btree.New(2),
 		index:   map[string]map[string][]Indexer{},
+		fields:  map[string]*Fields{},
 	}
 }
 
 // CreateField adds a field to the list of indexed fields before the store is populated
-func (s *Store) CreateField(field string) *Store {
+func (s *Store) CreateField(fields ...string) *Store {
 	if s.used {
 		panic("Cannot create field on in-use store")
 	}
-	s.fields = append(s.fields, field)
+
+	id := strings.Join(fields, "\000")
+	s.fields[id] = &Fields{
+		id: id,
+		list: fields,
+		store: s,
+	}
 	return s
 }
 
@@ -83,16 +98,35 @@ func (s *Store) Get(search Indexer) Indexer {
 	return nil
 }
 
+func (s *Store) In(fields ...string) *Fields {
+	id := strings.Join(fields, "\000")
+	if f, ok := s.fields[id]; ok {
+		return f
+	}
+	return nil
+}
+
 // Lookup returns the list of items from the indexed field that match given key
 // Returned items are not guaranteed to be in any particular order
-func (s *Store) Lookup(field, key string) []Indexer {
+func (f *Fields) Lookup(keys ...string) []Indexer {
+	if f == nil {
+		return nil
+	}
+
+	if len(keys) != len(f.list) {
+		return nil
+	}
+
+	s := f.store
 	s.RLock()
 	defer s.RUnlock()
 
-	index, ok := s.index[field]
+	index, ok := s.index[f.id]
 	if !ok {
 		return nil
 	}
+
+	key := strings.Join(keys, "\000")
 
 	values, ok := index[key]
 	if !ok {
@@ -215,13 +249,19 @@ func (s *Store) Len() int {
 }
 
 // Fields returns the list of indexed fields
-func (s *Store) Fields() []string {
+func (s *Store) Fields() [][]string {
 	s.RLock()
 	defer s.RUnlock()
 
-	f := make([]string, len(s.fields))
-	copy(f, s.fields)
-	return f
+	c := make([][]string, len(s.fields))
+	i := 0
+	for _, f := range s.fields {
+		fc := make([]string, len(f.list))
+		copy(fc, f.list)
+		c[i] = fc
+		i++
+	}
+	return c
 }
 
 // Keys returns the list of distinct keys for a field
@@ -292,17 +332,19 @@ func (s *Store) add(indexer Indexer) Indexer {
 		ow = found.(*wrap)
 	}
 
-	for i, field := range s.fields {
+	i := 0
+	for _, field := range s.fields {
 		key := w.fields[i]
 		if ow != nil {
 			oldKey := ow.fields[i]
 			if oldKey != key {
-				s.rmFromIndex(field, oldKey, indexer)
-				s.addToIndex(field, key, indexer)
+				s.rmFromIndex(field.id, oldKey, indexer)
+				s.addToIndex(field.id, key, indexer)
 			}
 		} else {
-			s.addToIndex(field, key, indexer)
+			s.addToIndex(field.id, key, indexer)
 		}
+		i++
 	}
 
 	if ow != nil {
@@ -311,7 +353,7 @@ func (s *Store) add(indexer Indexer) Indexer {
 	return nil
 }
 
-func (s *Store) addToIndex(field, key string, indexer Indexer) {
+func (s *Store) addToIndex(field string, key string, indexer Indexer) {
 	index, ok := s.index[field]
 	if !ok {
 		index = map[string][]Indexer{}
@@ -325,9 +367,12 @@ func (s *Store) rm(indexer Indexer) Indexer {
 	removed := s.backing.Delete(&wrap{indexer, nil})
 	if removed != nil {
 		w := removed.(*wrap)
-		for i, field := range s.fields {
+
+		i := 0
+		for _, field := range s.fields {
 			key := w.fields[i]
-			s.rmFromIndex(field, key, indexer)
+			s.rmFromIndex(field.id, key, indexer)
+			i++
 		}
 	}
 
@@ -337,7 +382,7 @@ func (s *Store) rm(indexer Indexer) Indexer {
 	return nil
 }
 
-func (s *Store) rmFromIndex(field, key string, indexer Indexer) {
+func (s *Store) rmFromIndex(field string, key string, indexer Indexer) {
 	index, ok := s.index[field]
 	if !ok {
 		return
@@ -358,10 +403,20 @@ func (s *Store) rmFromIndex(field, key string, indexer Indexer) {
 	}
 }
 
+func getCompoundField(indexer Indexer, field *Fields) string {
+	c := make([]string, len(field.list))
+	for i, f := range field.list {
+		c[i] = indexer.GetField(f)
+	}
+	return strings.Join(c, "\000")
+}
+
 func (s *Store) wrapIt(indexer Indexer) *wrap {
 	fields := make([]string, len(s.fields))
-	for i, field := range s.fields {
-		fields[i] = indexer.GetField(field)
+	i := 0
+	for _, field := range s.fields {
+		fields[i] = getCompoundField(indexer, field)
+		i++
 	}
 
 	return &wrap{

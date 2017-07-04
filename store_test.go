@@ -13,6 +13,7 @@ var expired = 0
 type X struct {
 	a int
 	b string
+	c string
 }
 
 func (x *X) Less(o Indexer) bool {
@@ -22,6 +23,9 @@ func (x *X) IsExpired() bool {
 	return x.a == expired
 }
 func (x *X) GetField(f string) string {
+	if f == "c" {
+		return x.c
+	}
 	return x.b
 }
 
@@ -33,7 +37,7 @@ func TestCreateField(t *testing.T) {
 	if len(f) != 1 {
 		t.Errorf("Fields length should be 1 (is %d)", len(f))
 	}
-	if f[0] != "test" {
+	if f[0] == nil || len(f[0]) != 1 || f[0][0] != "test" {
 		t.Errorf("Fields should be []string{\"test\"} (is: %#v)", f)
 	}
 }
@@ -76,7 +80,7 @@ func TestLookup(t *testing.T) {
 	s.Put(&X{a: 1, b: "test"})
 	s.Put(&X{a: 2, b: "test"})
 	s.Put(&X{a: 3, b: "not"})
-	vals := s.Lookup("b", "test")
+	vals := s.In("b").Lookup("test")
 	if len(vals) != 2 {
 		t.Errorf("Length of looked up values should be 2 (was %s)", len(vals))
 	}
@@ -92,7 +96,7 @@ func TestLookupInvalidField(t *testing.T) {
 	s := NewStore()
 	s.CreateField("b")
 	s.Put(&X{a: 1, b: "test"})
-	vals := s.Lookup("c", "test")
+	vals := s.In("c").Lookup("test")
 	if vals != nil {
 		t.Errorf("Lookup of invalid field should be nil (was %#v)", vals)
 	}
@@ -102,7 +106,7 @@ func TestLookupNonPresentKey(t *testing.T) {
 	s := NewStore()
 	s.CreateField("b")
 	s.Put(&X{a: 1, b: "test"})
-	vals := s.Lookup("b", "dumb")
+	vals := s.In("b").Lookup("dumb")
 	if vals != nil {
 		t.Errorf("Lookup of non-present key should be nil (was %#v)", vals)
 	}
@@ -217,7 +221,7 @@ func TestTraverse(t *testing.T) {
 		t.Errorf("Expired item not removed expected %s (got %s)", expect, got)
 	}
 
-	vals := s.Lookup("b", "four")
+	vals := s.In("b").Lookup("four")
 	if vals != nil {
 		t.Errorf("Expired item found by field (got %#v)", vals)
 	}
@@ -285,6 +289,28 @@ func TestNotificates(t *testing.T) {
 	s.Expire()
 
 	expired = 0
+}
+
+func TestCompound(t *testing.T) {
+	s := NewStore()
+	s.CreateField("b", "c")
+	v1a := &X{a: 1, b: "one", c: "xxx"}
+	v1b := &X{a: 2, b: "one", c: "zzz"}
+	v2a := &X{a: 3, b: "two", c: "xxx"}
+	v2b := &X{a: 4, b: "two", c: "zzz"}
+
+	s.Put(v1a)
+	s.Put(v1b)
+	s.Put(v2a)
+	s.Put(v2b)
+
+	out := s.In("b", "c").Lookup("one", "zzz")
+	if n := len(out); n != 1 {
+		t.Errorf("Expected exactly one response from compound lookup (got %s)", n)
+	}
+	if out[0].(*X).a != 2 {
+		t.Errorf("Expected a = 2 in compound result (got %#v)", out[0])
+	}
 }
 
 func TestUnsure(t *testing.T) {

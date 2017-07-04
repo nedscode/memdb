@@ -97,6 +97,12 @@ before data gets stored. Attempt to set index fields after use will cause a pani
 		CreateField("model")
 ```
 
+You can also create compound keys by supplying multiple fields:
+
+```golang
+    mdb.CreateField("make", "model")
+```
+
 ## Adding items to the store.
 
 Saving items into the store is simple:
@@ -117,16 +123,22 @@ the search object to be deemed equivalent by your Less function:
 	fmt.Printf("Vehicle RRP is $%d\n", vehicle.rrp)
 ```
 
-## Looking up items by index
+## Looking up items by indexed field
 
 This is where it starts to get interesting, we can lookup items by any of our defined indexed fields:
 
 ```golang
-	indexers := mdb.Lookup("model", "Astra")
+	indexers := mdb.In("model").Lookup("Astra")
 	for _, indexer := range indexers {
 	    vehicle := indexer.(*car)
 		fmt.Printf("%s %s ($%d rrp)\n", vehicle.make, vehicle.model, vehicle.rrp)
 	}
+```
+
+If you have compound fields, you can search them like:
+
+```golang
+    indexers := mdb.In("make", "model").Lookup("Holden", "Astra")
 ```
 
 ## Traversing the database
