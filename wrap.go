@@ -8,6 +8,7 @@ import (
 
 type wrap struct {
 	indexer Indexer
+	fields []string
 }
 
 func (w *wrap) Less(than btree.Item) bool {

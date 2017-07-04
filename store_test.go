@@ -232,6 +232,59 @@ func TestTraverse(t *testing.T) {
 	}
 }
 
+func TestNotificates(t *testing.T) {
+	s := NewStore()
+	s.CreateField("b")
+	v1 := &X{a: 1, b: "one:"}
+
+	var expectEvent Event
+	var expectOld Indexer
+	var expectNew Indexer
+	h := func(event Event, old, new Indexer) {
+		if event != expectEvent {
+			t.Errorf("Expected event %#v (got %#v)", expectEvent, event)
+		}
+		if old != expectOld {
+			t.Errorf("Expected %#v old value %#v (got %#v)", event, expectOld, old)
+		}
+		if new != expectNew {
+			t.Errorf("Expected %#v new value %#v (got %#v)", event, expectNew, new)
+		}
+	}
+
+	s.On(Insert, h)
+	s.On(Update, h)
+	s.On(Remove, h)
+	s.On(Expiry, h)
+
+	expectEvent = Insert
+	expectOld = nil
+	expectNew = v1
+	s.Put(v1)
+
+	v1.b = "ZZZ"
+	expectEvent = Update
+	expectOld = v1
+	expectNew = v1
+	s.Put(v1)
+
+	expectEvent = Remove
+	expectOld = v1
+	expectNew = nil
+	s.Delete(v1)
+
+	expectEvent = Insert
+	expectOld = nil
+	expectNew = v1
+	s.Put(v1)
+
+	expired = 1
+	expectEvent = Expiry
+	expectOld = v1
+	expectNew = nil
+	s.Expire()
+}
+
 func TestUnsure(t *testing.T) {
 	if Unsure("A", "Z") != true {
 		t.Errorf("Expected A to be < Z")
@@ -239,7 +292,7 @@ func TestUnsure(t *testing.T) {
 }
 
 func TestLess(t *testing.T) {
-	v1 := &wrap{&X{a: 1, b: "one:"}}
+	v1 := &wrap{&X{a: 1, b: "one:"}, nil}
 	vx := btree.Int(5)
 
 	if v1.Less(vx) {

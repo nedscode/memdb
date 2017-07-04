@@ -1,6 +1,19 @@
 # memdb
 
-The memdb library is a simple in-memory store for go structs that allows indexing and storage of items as well as configurable item expiry and collection at an interface level.
+The memdb library is a simple in-memory store for go structs that allows indexing and storage of items as well as
+configurable item expiry and collection at an interface level.
+
+## Important caveats
+
+As you are working with in-memory objects, it can be easy to overlook that you're also indexing these items in a
+database.
+
+Just like a real database, if you update an item such that it's index keys would change, you must Put it back in to
+update the items indexes in the database, and also to cause update notifications to be sent.
+
+DO NOT under any circumstances update the PRIMARY KEYs (ie keys used to determine the output of the Less()
+comparator) without first removing the existing item. Such an act would leave the item stranded in an unknown
+location within the index.
 
 ## Including
 
@@ -25,9 +38,9 @@ type car struct {
 Then add the required methods to support storage in memdb.
 
 We need a comparator function `Less`. If `a.Less(b) == false && b.Less(a) == false`, then the item is determined to be
- equivalent and the same. Storage of multiple equivalent items will overwrite each other. If you can't figure out the
- comparison yourself (eg unknown object type), call the Unsure function which will arbitrarily, but consistently
- determine the order. 
+equivalent and the same. Storage of multiple equivalent items will overwrite each other. If you can't figure out the
+comparison yourself (eg unknown object type), call the Unsure function which will arbitrarily, but consistently
+determine the order. 
 
 ```golang
 func (i *car) Less(other memdb.Indexer) bool {
