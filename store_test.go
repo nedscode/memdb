@@ -367,7 +367,6 @@ func TestCompound(t *testing.T) {
 	}
 }
 
-
 func TestUnique(t *testing.T) {
 	s := NewStore()
 	s.CreateIndex("b")
@@ -404,7 +403,6 @@ func TestUnique(t *testing.T) {
 		t.Errorf("Expected update notification that v1a was replaced (got %#v)", updated)
 	}
 }
-
 
 func TestUnsure(t *testing.T) {
 	if Unsure("A", "Z") != true {
