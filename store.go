@@ -102,7 +102,7 @@ type NotifyFunc func(event Event, old, new Indexer)
 
 // NewStore returns an initialized store for you to use
 func NewStore() *Store {
-	happens := make(chan *happening, 1000)
+	happens := make(chan *happening, 100000)
 	s := &Store{
 		backing: btree.New(2),
 		index:   map[string]map[string][]Indexer{},
@@ -139,17 +139,21 @@ func (s *Store) CreateIndex(fields ...string) *Store {
 
 // Unique makes the current index unique
 // Making an index unique will force the delete of all but the last inserted item in the index upon Put()
-func (s *Store) Unique() {
+func (s *Store) Unique() *Store {
 	if s.used {
 		panic("Cannot create index on in-use store")
 	}
 	if s.cIndex != nil {
 		s.cIndex.unique = true
 	}
+	return s
 }
 
 // Get returns an item equal to the passed item from the store
 func (s *Store) Get(search Indexer) Indexer {
+	s.RLock()
+	defer s.RUnlock()
+
 	found := s.backing.Get(&wrap{search, nil})
 	if found == nil {
 		return nil
@@ -243,6 +247,9 @@ func (idx *Index) find(keys []string) []Indexer {
 
 // Ascend calls provided callback function from start (lowest order) of items until end or iterator function returns false
 func (s *Store) Ascend(cb Iterator) {
+	s.RLock()
+	defer s.RUnlock()
+
 	s.backing.Ascend(func(i btree.Item) bool {
 		if w, ok := i.(*wrap); ok {
 			return cb(w.indexer)
@@ -253,6 +260,9 @@ func (s *Store) Ascend(cb Iterator) {
 
 // AscendStarting calls provided callback function from item equal to at until end or iterator function returns false
 func (s *Store) AscendStarting(at Indexer, cb Iterator) {
+	s.RLock()
+	defer s.RUnlock()
+
 	s.backing.AscendGreaterOrEqual(&wrap{at, nil}, func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
 			return cb(w.indexer)
@@ -263,6 +273,9 @@ func (s *Store) AscendStarting(at Indexer, cb Iterator) {
 
 // Descend calls provided callback function from end (highest order) of items until start or iterator function returns false
 func (s *Store) Descend(cb Iterator) {
+	s.RLock()
+	defer s.RUnlock()
+
 	s.backing.Descend(func(i btree.Item) bool {
 		if w, ok := i.(*wrap); ok {
 			return cb(w.indexer)
@@ -273,6 +286,9 @@ func (s *Store) Descend(cb Iterator) {
 
 // DescendStarting calls provided callback function from item equal to at until start or iterator function returns false
 func (s *Store) DescendStarting(at Indexer, cb Iterator) {
+	s.RLock()
+	defer s.RUnlock()
+
 	s.backing.DescendLessOrEqual(&wrap{at, nil}, func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
 			return cb(w.indexer)
@@ -281,10 +297,11 @@ func (s *Store) DescendStarting(at Indexer, cb Iterator) {
 	})
 }
 
-// Expire finds all expiring items in the store and deletes them
-func (s *Store) Expire() int {
-	var rm []Indexer
+func (s *Store) findExpired() []Indexer {
+	s.RLock()
+	defer s.RUnlock()
 
+	var rm []Indexer
 	s.backing.Ascend(func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
 			if w.indexer.IsExpired() {
@@ -294,17 +311,22 @@ func (s *Store) Expire() int {
 		return true
 	})
 
-	if len(rm) > 0 {
-		s.Lock()
-		defer s.Unlock()
+	return rm
+}
 
-		for _, v := range rm {
-			old := s.rm(v)
-			if old != nil {
-				s.happens <- &happening{
-					event: Expiry,
-					old:   old,
-				}
+// Expire finds all expiring items in the store and deletes them
+func (s *Store) Expire() int {
+	rm := s.findExpired()
+
+	s.Lock()
+	defer s.Unlock()
+
+	for _, v := range rm {
+		old := s.rm(v)
+		if old != nil {
+			s.happens <- &happening{
+				event: Expiry,
+				old:   old,
 			}
 		}
 	}
