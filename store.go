@@ -43,6 +43,19 @@ type Index struct {
 // Event is a type of event emitted by the class, see the On() method
 type Event int
 
+// String describes the event type
+func (e Event) String() string {
+	switch e {
+	case Insert: return "Insert event"
+	case Update: return "Update event"
+	case Remove: return "Remove event"
+	case Expiry: return "Expiry event"
+	default:
+		break
+	}
+	return "Unknown event"
+}
+
 const (
 	// Insert Events happen when an item is inserted for the first time
 	Insert Event = iota
@@ -231,7 +244,7 @@ func (s *Store) DescendStarting(at Indexer, cb Iterator) {
 }
 
 // Expire finds all expiring items in the store and deletes them
-func (s *Store) Expire() {
+func (s *Store) Expire() int {
 	s.Lock()
 	defer s.Unlock()
 
@@ -252,6 +265,8 @@ func (s *Store) Expire() {
 			s.emit(Expiry, old, nil)
 		}
 	}
+
+	return len(rm)
 }
 
 // Put places an indexer item into the store
