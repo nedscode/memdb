@@ -70,6 +70,21 @@ const (
 	Expiry
 )
 
+type noIndexer struct{}
+func (x *noIndexer) Less(_ Indexer) bool {
+	return true
+}
+func (x *noIndexer) IsExpired() bool {
+	return false
+}
+func (x *noIndexer) GetField(_ string) string {
+	return ""
+}
+
+var (
+	None = &noIndexer{}
+)
+
 // NotifyFunc is an event receiver that gets called when events happen
 type NotifyFunc func(event Event, old, new Indexer)
 
@@ -277,7 +292,7 @@ func (s *Store) Put(indexer Indexer) Indexer {
 	old := s.add(indexer)
 	if old == nil {
 		s.emit(Insert, nil, indexer)
-	} else {
+	} else if old != None {
 		s.emit(Update, old, indexer)
 	}
 	return old
@@ -390,26 +405,30 @@ func (s *Store) add(indexer Indexer) Indexer {
 		ow = found.(*wrap)
 	}
 
+	var emitted bool
 	for _, index := range s.indexes {
 		key := w.values[index.n]
 		if ow != nil {
 			oldKey := ow.values[index.n]
 			if oldKey != key {
 				s.rmFromIndex(index.id, oldKey, ow.indexer)
-				s.addToIndex(index.id, key, indexer)
+				emitted = s.addToIndex(index.id, key, indexer)
 			}
 		} else {
-			s.addToIndex(index.id, key, indexer)
+			emitted = s.addToIndex(index.id, key, indexer)
 		}
 	}
 
 	if ow != nil {
 		return ow.indexer
 	}
+	if emitted {
+		return None
+	}
 	return nil
 }
 
-func (s *Store) addToIndex(indexID string, key string, indexer Indexer) {
+func (s *Store) addToIndex(indexID string, key string, indexer Indexer) (emitted bool) {
 	index, ok := s.indexes[indexID]
 	if !ok {
 		return
@@ -428,11 +447,13 @@ func (s *Store) addToIndex(indexID string, key string, indexer Indexer) {
 			rm := s.rm(item)
 			if rm != nil {
 				s.emit(Update, rm, indexer)
+				emitted = true
 			}
 		}
 		items = nil
 	}
 	indexItems[key] = append(items, indexer)
+	return
 }
 
 func (s *Store) rm(indexer Indexer) Indexer {
