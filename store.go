@@ -23,12 +23,19 @@ type Store struct {
 	indexes map[string]*Index
 	cIndex  *Index
 	index   map[string]map[string][]Indexer
+	happens chan *happening
 	used    bool
 
 	insertNotifiers []NotifyFunc
 	updateNotifiers []NotifyFunc
 	removeNotifiers []NotifyFunc
 	expiryNotifiers []NotifyFunc
+}
+
+type happening struct {
+	event Event
+	old   Indexer
+	new   Indexer
 }
 
 // Index represent a list of indexes
@@ -46,10 +53,14 @@ type Event int
 // String describes the event type
 func (e Event) String() string {
 	switch e {
-	case Insert: return "Insert event"
-	case Update: return "Update event"
-	case Remove: return "Remove event"
-	case Expiry: return "Expiry event"
+	case Insert:
+		return "Insert event"
+	case Update:
+		return "Update event"
+	case Remove:
+		return "Remove event"
+	case Expiry:
+		return "Expiry event"
 	default:
 		break
 	}
@@ -71,6 +82,7 @@ const (
 )
 
 type noIndexer struct{}
+
 func (x *noIndexer) Less(_ Indexer) bool {
 	return true
 }
@@ -82,7 +94,7 @@ func (x *noIndexer) GetField(_ string) string {
 }
 
 var (
-	None = &noIndexer{}
+	none = &noIndexer{}
 )
 
 // NotifyFunc is an event receiver that gets called when events happen
@@ -90,11 +102,21 @@ type NotifyFunc func(event Event, old, new Indexer)
 
 // NewStore returns an initialized store for you to use
 func NewStore() *Store {
-	return &Store{
+	happens := make(chan *happening, 1000)
+	s := &Store{
 		backing: btree.New(2),
 		index:   map[string]map[string][]Indexer{},
 		indexes: map[string]*Index{},
+		happens: happens,
 	}
+
+	go func() {
+		for h := range happens {
+			s.emit(h.event, h.old, h.new)
+		}
+	}()
+
+	return s
 }
 
 // CreateIndex adds a new index to the list of indexes before the store is populated
@@ -128,9 +150,6 @@ func (s *Store) Unique() {
 
 // Get returns an item equal to the passed item from the store
 func (s *Store) Get(search Indexer) Indexer {
-	s.RLock()
-	defer s.RUnlock()
-
 	found := s.backing.Get(&wrap{search, nil})
 	if found == nil {
 		return nil
@@ -145,16 +164,27 @@ func (s *Store) Get(search Indexer) Indexer {
 
 // In finds a simple or compound index to perform queries upon
 func (s *Store) In(fields ...string) *Index {
+	s.RLock()
+	defer s.RUnlock()
+
 	id := strings.Join(fields, "\000")
 	if f, ok := s.indexes[id]; ok {
 		return f
 	}
+
 	return nil
 }
 
 // Each calls iterator for every matched element
 // Items are not guaranteed to be in any particular order
 func (idx *Index) Each(cb Iterator, keys ...string) {
+	if idx == nil {
+		return
+	}
+
+	idx.store.RLock()
+	defer idx.store.RUnlock()
+
 	values := idx.find(keys)
 	if values == nil {
 		return
@@ -169,6 +199,13 @@ func (idx *Index) Each(cb Iterator, keys ...string) {
 // Lookup returns the list of items from the index that match given key
 // Returned items are not guaranteed to be in any particular order
 func (idx *Index) Lookup(keys ...string) []Indexer {
+	if idx == nil {
+		return nil
+	}
+
+	idx.store.RLock()
+	defer idx.store.RUnlock()
+
 	values := idx.find(keys)
 	if values == nil {
 		return nil
@@ -188,8 +225,6 @@ func (idx *Index) find(keys []string) []Indexer {
 	}
 
 	s := idx.store
-	s.RLock()
-	defer s.RUnlock()
 
 	index, ok := s.index[idx.id]
 	if !ok {
@@ -208,9 +243,6 @@ func (idx *Index) find(keys []string) []Indexer {
 
 // Ascend calls provided callback function from start (lowest order) of items until end or iterator function returns false
 func (s *Store) Ascend(cb Iterator) {
-	s.RLock()
-	defer s.RUnlock()
-
 	s.backing.Ascend(func(i btree.Item) bool {
 		if w, ok := i.(*wrap); ok {
 			return cb(w.indexer)
@@ -221,9 +253,6 @@ func (s *Store) Ascend(cb Iterator) {
 
 // AscendStarting calls provided callback function from item equal to at until end or iterator function returns false
 func (s *Store) AscendStarting(at Indexer, cb Iterator) {
-	s.RLock()
-	defer s.RUnlock()
-
 	s.backing.AscendGreaterOrEqual(&wrap{at, nil}, func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
 			return cb(w.indexer)
@@ -234,9 +263,6 @@ func (s *Store) AscendStarting(at Indexer, cb Iterator) {
 
 // Descend calls provided callback function from end (highest order) of items until start or iterator function returns false
 func (s *Store) Descend(cb Iterator) {
-	s.RLock()
-	defer s.RUnlock()
-
 	s.backing.Descend(func(i btree.Item) bool {
 		if w, ok := i.(*wrap); ok {
 			return cb(w.indexer)
@@ -247,9 +273,6 @@ func (s *Store) Descend(cb Iterator) {
 
 // DescendStarting calls provided callback function from item equal to at until start or iterator function returns false
 func (s *Store) DescendStarting(at Indexer, cb Iterator) {
-	s.RLock()
-	defer s.RUnlock()
-
 	s.backing.DescendLessOrEqual(&wrap{at, nil}, func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
 			return cb(w.indexer)
@@ -260,9 +283,6 @@ func (s *Store) DescendStarting(at Indexer, cb Iterator) {
 
 // Expire finds all expiring items in the store and deletes them
 func (s *Store) Expire() int {
-	s.Lock()
-	defer s.Unlock()
-
 	var rm []Indexer
 
 	s.backing.Ascend(func(item btree.Item) bool {
@@ -274,10 +294,18 @@ func (s *Store) Expire() int {
 		return true
 	})
 
-	for _, v := range rm {
-		old := s.rm(v)
-		if old != nil {
-			s.emit(Expiry, old, nil)
+	if len(rm) > 0 {
+		s.Lock()
+		defer s.Unlock()
+
+		for _, v := range rm {
+			old := s.rm(v)
+			if old != nil {
+				s.happens <- &happening{
+					event: Expiry,
+					old:   old,
+				}
+			}
 		}
 	}
 
@@ -291,10 +319,18 @@ func (s *Store) Put(indexer Indexer) Indexer {
 
 	old := s.add(indexer)
 	if old == nil {
-		s.emit(Insert, nil, indexer)
-	} else if old != None {
-		s.emit(Update, old, indexer)
+		s.happens <- &happening{
+			event: Insert,
+			new:   indexer,
+		}
+	} else if old != none {
+		s.happens <- &happening{
+			event: Update,
+			old:   old,
+			new:   indexer,
+		}
 	}
+
 	return old
 }
 
@@ -305,16 +341,16 @@ func (s *Store) Delete(search Indexer) Indexer {
 
 	old := s.rm(search)
 	if old != nil {
-		s.emit(Remove, old, nil)
+		s.happens <- &happening{
+			event: Remove,
+			old:   old,
+		}
 	}
 	return old
 }
 
 // Len returns the number of items in the database
 func (s *Store) Len() int {
-	s.RLock()
-	defer s.RUnlock()
-
 	return s.backing.Len()
 }
 
@@ -334,13 +370,13 @@ func (s *Store) Indexes() [][]string {
 
 // Keys returns the list of distinct keys for an index
 func (s *Store) Keys(fields ...string) []string {
-	s.RLock()
-	defer s.RUnlock()
-
 	f := s.In(fields...)
 	if f == nil {
 		return nil
 	}
+
+	s.RLock()
+	defer s.RUnlock()
 
 	index, ok := s.index[f.id]
 	if !ok {
@@ -423,7 +459,7 @@ func (s *Store) add(indexer Indexer) Indexer {
 		return ow.indexer
 	}
 	if emitted {
-		return None
+		return none
 	}
 	return nil
 }
@@ -446,7 +482,11 @@ func (s *Store) addToIndex(indexID string, key string, indexer Indexer) (emitted
 		for _, item := range indexItems[key] {
 			rm := s.rm(item)
 			if rm != nil {
-				s.emit(Update, rm, indexer)
+				s.happens <- &happening{
+					event: Update,
+					old:   rm,
+					new:   indexer,
+				}
 				emitted = true
 			}
 		}

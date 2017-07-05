@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 var expired = 0
@@ -52,6 +53,19 @@ func TestCreateAfterStore(t *testing.T) {
 	s := NewStore()
 	s.Put(&X{})
 	s.CreateIndex("b")
+}
+
+func TestUniqueAfterStore(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("The code did not panic")
+		}
+	}()
+
+	s := NewStore()
+	s.CreateIndex("b")
+	s.Put(&X{})
+	s.Unique()
 }
 
 func TestGet(t *testing.T) {
@@ -312,6 +326,7 @@ func TestNotificates(t *testing.T) {
 	expectOne = v1
 	expectTwo = nil
 	s.Put(v1)
+	time.Sleep(10 * time.Millisecond)
 
 	expectEvent = Update
 	expectOld = v1
@@ -319,6 +334,7 @@ func TestNotificates(t *testing.T) {
 	expectOne = nil
 	expectTwo = v2
 	s.Put(v2)
+	time.Sleep(10 * time.Millisecond)
 
 	expectEvent = Remove
 	expectOld = v2
@@ -326,6 +342,7 @@ func TestNotificates(t *testing.T) {
 	expectOne = nil
 	expectTwo = nil
 	s.Delete(v1) // This is a trick as we asked to delete v1, but v2 is actually getting deleted and should be expected
+	time.Sleep(10 * time.Millisecond)
 
 	expectEvent = Insert
 	expectOld = nil
@@ -333,6 +350,7 @@ func TestNotificates(t *testing.T) {
 	expectOne = v1
 	expectTwo = nil
 	s.Put(v1)
+	time.Sleep(10 * time.Millisecond)
 
 	expired = 1
 	expectEvent = Expiry
@@ -341,6 +359,7 @@ func TestNotificates(t *testing.T) {
 	expectOne = nil
 	expectTwo = nil
 	s.Expire()
+	time.Sleep(10 * time.Millisecond)
 
 	expired = 0
 }
