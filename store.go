@@ -288,7 +288,7 @@ func (s *Store) Len() int {
 	return s.backing.Len()
 }
 
-// Index returns the list of indexed indexes
+// Indexes returns the list of indexed indexes
 func (s *Store) Indexes() [][]string {
 	s.RLock()
 	defer s.RUnlock()
