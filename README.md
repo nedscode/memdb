@@ -88,19 +88,40 @@ func (i *car) GetField(field string) string {
 
 ## Creating a storage instance
 
-To create a storage instance initialise it and set the indexed fields. Indexed fields can only be set at the start
-before data gets stored. Attempt to set index fields after use will cause a panic.
+To create a storage instance initialise it and set the indexed fields.
+
+Indexed fields can only be set at the start before data gets stored. Attempt to set index fields after use will cause a
+panic.
 
 ```golang
 	mdb := memdb.NewStore().
-		CreateField("make").
-		CreateField("model")
+		CreateIndex("make").
+		CreateIndex("model")
 ```
 
-You can also create compound keys by supplying multiple fields:
+### Compound indexes
+
+You can also create compound indexes by supplying multiple fields:
 
 ```golang
-    mdb.CreateField("make", "model")
+    mdb.CreateIndex("make", "model")
+```
+
+# Unique indexes
+
+You can also create unique indexes by appending a `Unique()` to the definition.
+
+Putting an item with the same value as a unique index will cause the previous item to be "Updated".
+
+```golang
+    type car struct {
+	    make    string
+    	model   string
+	    rrp     int
+	    vin     string
+    }
+
+    mdb.CreateIndex("vin").Unique()
 ```
 
 ## Adding items to the store.

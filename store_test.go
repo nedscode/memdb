@@ -31,14 +31,14 @@ func (x *X) GetField(f string) string {
 
 func TestCreateField(t *testing.T) {
 	s := NewStore()
-	s.CreateField("test")
+	s.CreateIndex("test")
 
-	f := s.Fields()
+	f := s.Indexes()
 	if len(f) != 1 {
-		t.Errorf("Fields length should be 1 (is %d)", len(f))
+		t.Errorf("Index length should be 1 (is %d)", len(f))
 	}
 	if f[0] == nil || len(f[0]) != 1 || f[0][0] != "test" {
-		t.Errorf("Fields should be []string{\"test\"} (is: %#v)", f)
+		t.Errorf("Index should be []string{\"test\"} (is: %#v)", f)
 	}
 }
 
@@ -51,7 +51,7 @@ func TestCreateAfterStore(t *testing.T) {
 
 	s := NewStore()
 	s.Put(&X{})
-	s.CreateField("b")
+	s.CreateIndex("b")
 }
 
 func TestGet(t *testing.T) {
@@ -76,7 +76,7 @@ func TestNoGet(t *testing.T) {
 
 func TestLookup(t *testing.T) {
 	s := NewStore()
-	s.CreateField("b")
+	s.CreateIndex("b")
 	s.Put(&X{a: 1, b: "test"})
 	s.Put(&X{a: 2, b: "test"})
 	s.Put(&X{a: 3, b: "not"})
@@ -94,7 +94,7 @@ func TestLookup(t *testing.T) {
 
 func TestLookupInvalidField(t *testing.T) {
 	s := NewStore()
-	s.CreateField("b")
+	s.CreateIndex("b")
 	s.Put(&X{a: 1, b: "test"})
 	vals := s.In("c").Lookup("test")
 	if vals != nil {
@@ -104,7 +104,7 @@ func TestLookupInvalidField(t *testing.T) {
 
 func TestLookupNonPresentKey(t *testing.T) {
 	s := NewStore()
-	s.CreateField("b")
+	s.CreateIndex("b")
 	s.Put(&X{a: 1, b: "test"})
 	vals := s.In("b").Lookup("dumb")
 	if vals != nil {
@@ -114,8 +114,8 @@ func TestLookupNonPresentKey(t *testing.T) {
 
 func TestTraverse(t *testing.T) {
 	s := NewStore()
-	s.CreateField("b")
-	s.CreateField("c")
+	s.CreateIndex("b")
+	s.CreateIndex("c")
 
 	v1 := &X{a: 1, b: "one:", c: "ZZZ"}
 	v2 := &X{a: 2, b: "two:", c: "ZZZ"}
@@ -240,8 +240,8 @@ func TestTraverse(t *testing.T) {
 
 func TestEach(t *testing.T) {
 	s := NewStore()
-	s.CreateField("b")
-	s.CreateField("c")
+	s.CreateIndex("b")
+	s.CreateIndex("c")
 
 	v1 := &X{a: 1, b: "one:", c: "ZZZ"}
 	v2 := &X{a: 2, b: "two:", c: "ZZZ"}
@@ -268,7 +268,7 @@ func TestEach(t *testing.T) {
 
 func TestNotificates(t *testing.T) {
 	s := NewStore()
-	s.CreateField("b")
+	s.CreateIndex("b")
 	v1 := &X{a: 1, b: "one:"}
 	v2 := &X{a: 1, b: "two:"}
 
@@ -347,7 +347,7 @@ func TestNotificates(t *testing.T) {
 
 func TestCompound(t *testing.T) {
 	s := NewStore()
-	s.CreateField("b", "c")
+	s.CreateIndex("b", "c")
 	v1a := &X{a: 1, b: "one", c: "xxx"}
 	v1b := &X{a: 2, b: "one", c: "zzz"}
 	v2a := &X{a: 3, b: "two", c: "xxx"}
@@ -366,6 +366,45 @@ func TestCompound(t *testing.T) {
 		t.Errorf("Expected a = 2 in compound result (got %#v)", out[0])
 	}
 }
+
+
+func TestUnique(t *testing.T) {
+	s := NewStore()
+	s.CreateIndex("b")
+	s.CreateIndex("c").Unique()
+	v1a := &X{a: 1, b: "one", c: "a"}
+	v1b := &X{a: 2, b: "two", c: "a"}
+	v2 := &X{a: 3, b: "three", c: "b"}
+	v3 := &X{a: 4, b: "four", c: "c"}
+
+	var updated Indexer
+	s.On(Update, func(_ Event, old, new Indexer) {
+		updated = old
+	})
+
+	s.Put(v1a)
+	s.Put(v1b)
+	s.Put(v2)
+	s.Put(v3)
+
+	if n := s.Len(); n != 3 {
+		t.Errorf("Expected only 3 items in store (got %d)", n)
+	}
+
+	items := s.In("c").Lookup("a")
+	if n := len(items); n != 1 {
+		t.Errorf("Expected only 1 items in c index for a (got %d)", n)
+	}
+
+	if items[0] != v1b {
+		t.Errorf("Expected only item in c index for a to be v1b (got %#v)", items[0])
+	}
+
+	if updated != v1a {
+		t.Errorf("Expected update notification that v1a was replaced (got %#v)", updated)
+	}
+}
+
 
 func TestUnsure(t *testing.T) {
 	if Unsure("A", "Z") != true {

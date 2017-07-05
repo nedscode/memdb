@@ -51,8 +51,8 @@ func (i *car) String() string {
 
 func main() {
 	mdb := memdb.NewStore().
-		CreateField("make").
-		CreateField("model")
+		CreateIndex("make").
+		CreateIndex("model")
 
 	mdb.Put(&car{make: "Ford", model: "Fiesta", sales: 1375449.73})
 	mdb.Put(&car{make: "Ford", model: "Focus", sales: 7033248.90})
