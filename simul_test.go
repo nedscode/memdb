@@ -1,3 +1,4 @@
+// +build !race
 package memdb
 
 import (
@@ -76,7 +77,7 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 		CreateIndex("c").
 		CreateIndex("b", "c").Unique()
 
-	//var mutex sync.Mutex
+	expired = -aEls
 
 	// Run n threads in parallel, each with their own operation.
 	var wg sync.WaitGroup

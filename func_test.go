@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 	"flag"
+	"context"
 )
 
 var expired = 0
@@ -43,6 +44,9 @@ func (x *X) Less(o Indexer) bool {
 	return x.a < o.(*X).a
 }
 func (x *X) IsExpired() bool {
+	if expired < 0 {
+		return time.Now().UnixNano() % 1000000 > 995000
+	}
 	return x.a == expired
 }
 func (x *X) GetField(f string) string {
@@ -302,6 +306,10 @@ func TestEach(t *testing.T) {
 	}
 }
 
+func upTo(ms int) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 10*time.Millisecond)
+}
+
 func TestNotificates(t *testing.T) {
 	s := NewStore()
 	s.CreateIndex("b")
@@ -311,7 +319,12 @@ func TestNotificates(t *testing.T) {
 	var expectEvent Event
 	var expectOld, expectNew, expectOne, expectTwo Indexer
 
+	var ctx context.Context
+	var done context.CancelFunc
+
 	h := func(event Event, old, new Indexer) {
+		defer done()
+
 		if event != expectEvent {
 			t.Errorf("Expected event %#v (got %#v)", expectEvent, event)
 		}
@@ -342,38 +355,43 @@ func TestNotificates(t *testing.T) {
 	s.On(Remove, h)
 	s.On(Expiry, h)
 
+	ctx, done = upTo(10)
 	expectEvent = Insert
 	expectOld = nil
 	expectNew = v1
 	expectOne = v1
 	expectTwo = nil
 	s.Put(v1)
-	time.Sleep(10 * time.Millisecond)
+	<-ctx.Done()
 
+	ctx, done = upTo(10)
 	expectEvent = Update
 	expectOld = v1
 	expectNew = v2
 	expectOne = nil
 	expectTwo = v2
 	s.Put(v2)
-	time.Sleep(10 * time.Millisecond)
+	<-ctx.Done()
 
+	ctx, done = upTo(10)
 	expectEvent = Remove
 	expectOld = v2
 	expectNew = nil
 	expectOne = nil
 	expectTwo = nil
 	s.Delete(v1) // This is a trick as we asked to delete v1, but v2 is actually getting deleted and should be expected
-	time.Sleep(10 * time.Millisecond)
+	<-ctx.Done()
 
+	ctx, done = upTo(10)
 	expectEvent = Insert
 	expectOld = nil
 	expectNew = v1
 	expectOne = v1
 	expectTwo = nil
 	s.Put(v1)
-	time.Sleep(10 * time.Millisecond)
+	<-ctx.Done()
 
+	ctx, done = upTo(10)
 	expired = 1
 	expectEvent = Expiry
 	expectOld = v1
@@ -381,7 +399,7 @@ func TestNotificates(t *testing.T) {
 	expectOne = nil
 	expectTwo = nil
 	s.Expire()
-	time.Sleep(10 * time.Millisecond)
+	<-ctx.Done()
 
 	expired = 0
 }
@@ -418,16 +436,21 @@ func TestUnique(t *testing.T) {
 	v3 := &X{a: 4, b: "four", c: "c"}
 
 	var updated Indexer
+	var ctx context.Context
+	var done context.CancelFunc
+
 	s.On(Update, func(_ Event, old, new Indexer) {
+		defer done()
 		updated = old
 	})
 
+	ctx, done = upTo(10)
 	s.Put(v1a)
 	s.Put(v1b)
 	s.Put(v2)
 	s.Put(v3)
+	<-ctx.Done()
 
-	time.Sleep(10 * time.Millisecond)
 
 	if n := s.Len(); n != 3 {
 		t.Errorf("Expected only 3 items in store (got %d)", n)

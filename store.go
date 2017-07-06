@@ -373,6 +373,9 @@ func (s *Store) Delete(search Indexer) Indexer {
 
 // Len returns the number of items in the database
 func (s *Store) Len() int {
+	s.RLock()
+	defer s.RUnlock()
+
 	return s.backing.Len()
 }
 
