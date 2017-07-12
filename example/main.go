@@ -1,7 +1,7 @@
 package main
 
 import (
-	"git.neds.sh/golib/memdb"
+	"github.com/nedscode/memdb"
 
 	"fmt"
 )

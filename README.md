@@ -3,7 +3,12 @@
 The memdb library is a simple in-memory store for go structs that allows indexing and storage of items as well as
 configurable item expiry and collection at an interface level.
 
-
+[![Build Status](https://travis-ci.org/nedscode/memdb.svg?branch=master)](https://travis-ci.org/nedscode/memdb)
+[![Go Report Card](https://goreportcard.com/badge/github.com/nedscode/memdb)](https://goreportcard.com/report/github.com/nedscode/memdb)
+[![Documentation](https://godoc.org/github.com/nedscode/memdb?status.svg)](http://godoc.org/github.com/nedscode/memdb)
+[![Coverage Status](https://coveralls.io/repos/github/nedscode/memdb/badge.svg?branch=master)](https://coveralls.io/github/nedscode/memdb?branch=master)
+[![GitHub issues](https://img.shields.io/github/issues/nedscode/memdb.svg)](https://github.com/nedscode/memdb/issues)
+[![license](https://img.shields.io/github/license/nedscode/memdb.svg?maxAge=2592000)](https://github.com/nedscode/memdb/LICENSE)
 
 ## Important caveats
 
@@ -247,3 +252,7 @@ go func() {
 ```
 
 Now every 30 minutes, we will expire cars sold more than 24 hours ago from our listings.
+
+## License
+
+© 2017, Neds International, code is released under GNU LGPL v3.0, see [LICENSE](LICENSE) file.
