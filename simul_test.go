@@ -3,10 +3,10 @@
 package memdb
 
 import (
-	"sync"
-	"math/rand"
-	"testing"
 	"fmt"
+	"math/rand"
+	"sync"
+	"testing"
 	"time"
 )
 
@@ -15,7 +15,7 @@ func init() {
 		fmt.Println("Will skip longer simulations as -simulate was not specified.")
 	}
 	if qseed == 0 {
-		qseed = int(time.Now().UnixNano())%100000
+		qseed = int(time.Now().UnixNano()) % 100000
 		fmt.Printf("Performing simulation pattern %d. To repeat, rerun with -seed %d\n", qseed, qseed)
 	}
 }
@@ -132,8 +132,8 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 type simulateHandler func(mdb *Store)
 
 var (
-	aEls = 5000
-	oEls = 50
+	aEls   = 5000
+	oEls   = 50
 	exists = [5000]bool{}
 )
 
@@ -161,7 +161,7 @@ func simulatePutHandler(mdb *Store) {
 
 func getRand(n int, fuzz ...float64) int {
 	if len(fuzz) > 0 {
-		n = n + int(float64(n) * fuzz[0])
+		n = n + int(float64(n)*fuzz[0])
 	}
 	return int(rand.Int31n(int32(n - 1)))
 }
@@ -225,7 +225,7 @@ func simulateLookupHandler(mdb *Store) {
 func simulateEachHandler(mdb *Store) {
 	s := getRand(3)
 
-	ea := func (_ Indexer) bool {
+	ea := func(_ Indexer) bool {
 		time.Sleep(time.Duration(getRand(1000)) * time.Microsecond)
 		return getRand(100) < 98
 	}
@@ -247,7 +247,7 @@ func simulateWalkHandler(mdb *Store) {
 	s := getRand(4)
 	a := getRand(aEls)
 
-	ea := func (_ Indexer) bool {
+	ea := func(_ Indexer) bool {
 		time.Sleep(time.Duration(getRand(200)) * time.Microsecond)
 		return getRand(100) < 98
 	}

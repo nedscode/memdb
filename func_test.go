@@ -3,12 +3,12 @@ package memdb
 import (
 	"github.com/google/btree"
 
+	"context"
+	"flag"
 	"sort"
 	"strings"
 	"testing"
 	"time"
-	"flag"
-	"context"
 )
 
 var expired = 0
@@ -20,7 +20,7 @@ type X struct {
 }
 
 var (
-	sim bool
+	sim   bool
 	qseed int
 )
 
@@ -35,7 +35,7 @@ func (x *X) Less(o Indexer) bool {
 }
 func (x *X) IsExpired() bool {
 	if expired < 0 {
-		return time.Now().UnixNano() % 1000000 > 995000
+		return time.Now().UnixNano()%1000000 > 995000
 	}
 	return x.a == expired
 }
@@ -441,7 +441,6 @@ func TestUnique(t *testing.T) {
 	s.Put(v3)
 	<-ctx.Done()
 
-
 	if n := s.Len(); n != 3 {
 		t.Errorf("Expected only 3 items in store (got %d)", n)
 	}
@@ -472,5 +471,44 @@ func TestLess(t *testing.T) {
 
 	if v1.Less(vx) {
 		t.Errorf("Comparison with non-Indexer item should be false")
+	}
+}
+
+func TestNoIndexer(t *testing.T) {
+	n := &noIndexer{}
+
+	if !n.Less(n) {
+		t.Errorf("NoIndexer should be less than everything")
+	}
+
+	if n.IsExpired() {
+		t.Errorf("NoIndexer should never expire")
+	}
+
+	if n.GetField("test") != "" {
+		t.Errorf("NoIndexer should return empty for all fields")
+	}
+}
+
+func TestEventString(t *testing.T) {
+	if Insert.String() != "Insert event" {
+		t.Errorf("Insert string incorrect")
+	}
+
+	if Update.String() != "Update event" {
+		t.Errorf("Update string incorrect")
+	}
+
+	if Remove.String() != "Remove event" {
+		t.Errorf("Remove string incorrect")
+	}
+
+	if Expiry.String() != "Expiry event" {
+		t.Errorf("Expiry string incorrect")
+	}
+
+	bad := Event(-1)
+	if bad.String() != "Unknown event" {
+		t.Errorf("Event unknown string incorrect")
 	}
 }
