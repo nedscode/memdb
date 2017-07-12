@@ -112,7 +112,7 @@ func TestLookup(t *testing.T) {
 	s.Put(&X{a: 3, b: "not"})
 	vals := s.In("b").Lookup("test")
 	if len(vals) != 2 {
-		t.Errorf("Length of looked up values should be 2 (was %s)", len(vals))
+		t.Errorf("Length of looked up values should be 2 (was %d)", len(vals))
 	}
 	a := vals[0].(*X)
 	b := vals[1].(*X)
@@ -409,7 +409,7 @@ func TestCompound(t *testing.T) {
 
 	out := s.In("b", "c").Lookup("one", "zzz")
 	if n := len(out); n != 1 {
-		t.Errorf("Expected exactly one response from compound lookup (got %s)", n)
+		t.Errorf("Expected exactly one response from compound lookup (got %d)", n)
 	}
 	if out[0].(*X).a != 2 {
 		t.Errorf("Expected a = 2 in compound result (got %#v)", out[0])

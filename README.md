@@ -3,6 +3,8 @@
 The memdb library is a simple in-memory store for go structs that allows indexing and storage of items as well as
 configurable item expiry and collection at an interface level.
 
+
+
 ## Important caveats
 
 As you are working with in-memory objects, it can be easy to overlook that you're also indexing these items in a
@@ -17,10 +19,10 @@ location within the index.
 
 ## Including
 
-To start using, get memdb `go get git.neds.sh/golib/memdb` and include it in your code:
+To start using, get memdb `go get github.com/nedscode/memdb` and include it in your code:
 
 ```golang
-import "git.neds.sh/golib/memdb"
+import "github.com/nedscode/memdb"
 ```
 
 ## Defining you storage struct
