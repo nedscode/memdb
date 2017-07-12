@@ -1,4 +1,5 @@
 // +build !race
+
 package memdb
 
 import (
@@ -8,6 +9,16 @@ import (
 	"fmt"
 	"time"
 )
+
+func init() {
+	if !sim {
+		fmt.Println("Will skip longer simulations as -simulate was not specified.")
+	}
+	if qseed == 0 {
+		qseed = int(time.Now().UnixNano())%100000
+		fmt.Printf("Performing simulation pattern %d. To repeat, rerun with -seed %d\n", qseed, qseed)
+	}
+}
 
 func TestSimulate_1op_1p(t *testing.T)     { testSimulate(t, 1, 1) }
 func TestSimulate_10op_1p(t *testing.T)    { testSimulate(t, 10, 1) }

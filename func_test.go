@@ -3,7 +3,6 @@ package memdb
 import (
 	"github.com/google/btree"
 
-	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -29,15 +28,6 @@ func init() {
 	flag.BoolVar(&sim, "simulate", sim, "Simulate with black box test")
 	flag.IntVar(&qseed, "seed", 0, "Seed for randomiser")
 	flag.Parse()
-
-	if !sim {
-		fmt.Println("Will skip longer simulations as -simulate was not specified.")
-	}
-	if qseed == 0 {
-		qseed = int(time.Now().UnixNano())%100000
-		fmt.Printf("Performing simulation pattern %d. To repeat, rerun with -seed %d\n", qseed, qseed)
-	}
-
 }
 
 func (x *X) Less(o Indexer) bool {
