@@ -1,13 +1,19 @@
 # memdb
 
-The memdb library is a simple in-memory store for go structs that allows indexing and storage of items as well as
-configurable item expiry and collection at an interface level.
+The memdb library is a simple, light-weight, in-memory store for go structs that allows indexing and storage of items as well as configurable item expiry and collection at an interface level.
+
+Persistance to disk is optionally available in the [persistfile](persist/file) package, should it be required, but has an overhead of having to encode/save the items when inserted/updated and to load the items at creation time.
+
+Importantly this memdb library only stores pointers to your original struct, so all benefits and caveats of this fact apply. For example, your original struct remains mutable which can be useful (see caveats below). There is a very low overhead for storing items above that of creating the original struct.
+
+If you're looking for a more full featured in-memory database with immutable storage and snapshots/transactions, you may be interested in looking into [Hashicorp's go-memdb](https://github.com/hashicorp/go-memdb) instead, it does have additional overheads, but less of the caveats.
 
 [![Build Status](https://travis-ci.org/nedscode/memdb.svg?branch=master)](https://travis-ci.org/nedscode/memdb)
 [![Go Report Card](https://goreportcard.com/badge/github.com/nedscode/memdb)](https://goreportcard.com/report/github.com/nedscode/memdb)
 [![Documentation](https://godoc.org/github.com/nedscode/memdb?status.svg)](http://godoc.org/github.com/nedscode/memdb)
 [![Coverage Status](https://coveralls.io/repos/github/nedscode/memdb/badge.svg?branch=master)](https://coveralls.io/github/nedscode/memdb?branch=master)
 [![GitHub issues](https://img.shields.io/github/issues/nedscode/memdb.svg)](https://github.com/nedscode/memdb/issues)
+
 [![license](https://img.shields.io/github/license/nedscode/memdb.svg?maxAge=2592000)](https://github.com/nedscode/memdb/LICENSE)
 
 ## Important caveats
@@ -16,7 +22,7 @@ As you are working with in-memory objects, it can be easy to overlook that you'r
 database.
 
 Just like a real database, if you update an item such that it's index keys would change, you must Put it back in to
-update the items indexes in the database, and also to cause update notifications to be sent.
+update the items indexes in the database, and also to cause update notifications to be sent (and be persisted to disk if you're using this function).
 
 DO NOT under any circumstances update the PRIMARY KEYs (ie keys used to determine the output of the Less()
 comparator) without first removing the existing item. Such an act would leave the item stranded in an unknown
