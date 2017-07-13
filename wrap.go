@@ -21,10 +21,10 @@ func (w *wrap) ID() string {
 		safeChars := "23456789ABCDEFGHJKLMNPQRSTWXYZabcdefghijkmnopqrstuvwxyz"
 
 		var (
-			now   = float64(time.Now().UnixNano()) / float64(time.Millisecond)
+			now   = float64(time.Now().UnixNano())
 			n     = len(safeChars)
 			scale = float64(n)
-			week  = float64(86400000 * 7)
+			week  = float64(86400000000000 * 7)
 			weeks = math.Floor(now / week)
 			ofs   = now - weeks*week
 			id    = make([]byte, 12)
@@ -33,15 +33,17 @@ func (w *wrap) ID() string {
 		id[0] = safeChars[int64(weeks/scale)%int64(scale)]
 		id[1] = safeChars[int64(weeks)%int64(scale)]
 
-		for i := 1; i < 3; i++ {
-			r := ofs / week * scale
+		for i := 2; i < 7; i++ {
+			r := math.Floor(ofs / week * scale)
 			ofs -= r * week / scale
 			scale *= float64(n)
-			id[i+1] = safeChars[int64(r)]
+			id[i] = safeChars[int64(r)]
 		}
-		for i := 4; i < 12; i++ {
-			id[i] = safeChars[rand.Int31n(int32(n-1))]
+
+		for i := 7; i < 12; i++ {
+			id[i] = safeChars[rand.Int31n(int32(n))]
 		}
+
 		w.id = string(id)
 	}
 
