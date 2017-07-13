@@ -263,30 +263,33 @@ Now every 30 minutes, we will expire cars sold more than 24 hours ago from our l
 
 ## Persistence
 
-Sometimes you want to have your cake and eat it too. While this is an in-memory database,
-we also support store-on-put and load-at-create style persistence.
+Sometimes you want to have your cake and eat it too. While this is specifically an in-memory
+database, we also support an optional store-on-put and load-at-start style persistence model.
 
 This is achieved by adding a Persister to the store after adding indexes and before beginning
 to use it.
 
-There is currently 
+There is currently a simple file-based Persister that you can use for simple use-cases, and as
+a platform for developing your own more complicated solutions.
+
+This is an example of using the built-in file Persister:
 
 ```golang
-    p := filepersist.NewFileStorage(
-        "/tmp/mydata",
-        func(indexerType string) interface{} {
-            if (indexerType == "*main.car") {
-                return &car{}
-            }
-            return nil
-        },
-    )
+func indexerFactory(indexerType string) interface{} {
+    if (indexerType == "*main.car") {
+        return &car{}
+    }
+    return nil
+}
+
+// …
+
+    p := filepersist.NewFileStorage("/tmp/mydata", indexerFactory)
     mdb := memdb.NewStore().
         CreateIndex("make").
         CreateIndex("model").
         Persistent(p)
 ```
-
 
 ## License
 
