@@ -199,7 +199,7 @@ If you wish to traverse your simple or compound indexed fields, you may also do 
     mdb.In("make", "model").Each(func(indexer memdb.Indexer) bool {
         vehicle := indexer.(*car)
         fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
-}, "Holden", "Astra")
+    }, "Holden", "Astra")
 ```
 
 ## Notification
