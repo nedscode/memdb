@@ -36,9 +36,9 @@ Define your struct as normal:
 
 ```golang
 type car struct {
-	Make    string
-	Model   string
-	RRP     int
+    Make    string
+    Model   string
+    RRP     int
 }
 ```
 
@@ -51,20 +51,20 @@ determine the order.
 
 ```golang
 func (i *car) Less(other memdb.Indexer) bool {
-	switch o := other.(type) {
-	case *car:
-		if i.Make < o.Make {
-			return true
-		}
-		if i.Make > o.Make {
-			return false
-		}
-		if i.Model < o.Model {
-			return true
-		}
-		return false
-	}
-	return memdb.Unsure(i, other)
+    switch o := other.(type) {
+    case *car:
+        if i.Make < o.Make {
+            return true
+        }
+        if i.Make > o.Make {
+            return false
+        }
+        if i.Model < o.Model {
+            return true
+        }
+        return false
+    }
+    return memdb.Unsure(i, other)
 }
 ```
 
@@ -73,7 +73,7 @@ items to be expired, so set the function to return false.
 
 ```golang
 func (i *car) IsExpired() bool {
-	return false
+    return false
 }
 ```
 
@@ -82,14 +82,14 @@ and stored as strings:
 
 ```golang
 func (i *car) GetField(field string) string {
-	switch field {
-	case "make":
-		return i.Make
-	case "model":
-		return i.Model
-	default:
-		return "" // Indicates should not be indexed
-	}
+    switch field {
+    case "make":
+        return i.Make
+    case "model":
+        return i.Model
+    default:
+        return "" // Indicates should not be indexed
+    }
 }
 ```
 
@@ -101,9 +101,9 @@ Indexed fields can only be set at the start before data gets stored. Attempt to 
 panic.
 
 ```golang
-	mdb := memdb.NewStore().
-		CreateIndex("make").
-		CreateIndex("model")
+    mdb := memdb.NewStore().
+        CreateIndex("make").
+        CreateIndex("model")
 ```
 
 ### Compound indexes
@@ -122,10 +122,10 @@ Putting an item with the same value as a unique index will cause the previous it
 
 ```golang
     type car struct {
-	    Make    string
-    	Model   string
-	    RRP     int
-	    Vin     string
+        Make    string
+        Model   string
+        RRP     int
+        Vin     string
     }
 
     mdb.CreateIndex("vin").Unique()
@@ -136,9 +136,9 @@ Putting an item with the same value as a unique index will cause the previous it
 Saving items into the store is simple:
 
 ```golang
-	mdb.Put(&car{Make: "Ford", Model: "Fiesta", RRP: 27490})
-	mdb.Put(&car{Make: "Holden", Model: "Astra", RRP: 24190})
-	mdb.Put(&car{Make: "Honda", Model: "Jazz", RRP: 19790})
+    mdb.Put(&car{Make: "Ford", Model: "Fiesta", RRP: 27490})
+    mdb.Put(&car{Make: "Holden", Model: "Astra", RRP: 24190})
+    mdb.Put(&car{Make: "Honda", Model: "Jazz", RRP: 19790})
 ```
 
 ## Retrieving an item
@@ -147,8 +147,8 @@ In order to retrieve an item, supply an eqivalent item as a search parameter, yo
 the search object to be deemed equivalent by your Less function:
 
 ```golang
-	vehicle := mdb.Get(&car{Make: "Holden", Model: "Astra"}).(*car)
-	fmt.Printf("Vehicle RRP is $%d\n", vehicle.RRP)
+    vehicle := mdb.Get(&car{Make: "Holden", Model: "Astra"}).(*car)
+    fmt.Printf("Vehicle RRP is $%d\n", vehicle.RRP)
 ```
 
 ## Looking up items by indexed field
@@ -156,11 +156,11 @@ the search object to be deemed equivalent by your Less function:
 This is where it starts to get interesting, we can lookup items by any of our defined indexed fields:
 
 ```golang
-	indexers := mdb.In("model").Lookup("Astra")
-	for _, indexer := range indexers {
-	    vehicle := indexer.(*car)
-		fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
-	}
+    indexers := mdb.In("model").Lookup("Astra")
+    for _, indexer := range indexers {
+        vehicle := indexer.(*car)
+        fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
+    }
 ```
 
 If you have compound fields, you can search them like:
@@ -182,24 +182,24 @@ following functions:
 Use the functions by providing an iterator that returns false to stop traversal as follows:
 
 ```golang
-	fmt.Println("Iterating over all cars, ascending:\n")
-	count := 0
-	mdb.Ascend(func(indexer memdb.Indexer) bool {
-		vehicle := indexer.(*car)
-		fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
-		count++
-		return true
-	})
-	fmt.Println("Found %d cars\n", count)
+    fmt.Println("Iterating over all cars, ascending:\n")
+    count := 0
+    mdb.Ascend(func(indexer memdb.Indexer) bool {
+        vehicle := indexer.(*car)
+        fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
+        count++
+        return true
+    })
+    fmt.Println("Found %d cars\n", count)
 ```
 
 If you wish to traverse your simple or compound indexed fields, you may also do this via:
 
 ```golang
     mdb.In("make", "model").Each(func(indexer memdb.Indexer) bool {
-		vehicle := indexer.(*car)
-		fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
-    }, "Holden", "Astra")
+        vehicle := indexer.(*car)
+        fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
+}, "Holden", "Astra")
 ```
 
 ## Notification
@@ -233,10 +233,10 @@ Say we expanded the car struct to have a sold time
 
 ```golang
 type car struct {
-	Make    string
-	Model   string
-	RRP     int
-	Sold    time.Time
+    Make    string
+    Model   string
+    RRP     int
+    Sold    time.Time
 }
 ```
 
@@ -244,7 +244,7 @@ Then changed the IsExpired method like:
 
 ```golang
 func (i *car) IsExpired() bool {
-	return i.Sold.Before(time.Now().Sub(24 * time.Hour))
+    return i.Sold.Before(time.Now().Sub(24 * time.Hour))
 }
 ```
 
@@ -252,10 +252,10 @@ Then scheduled the Expire function:
 
 ```golang
 go func() {
-	tick := time.Tick(30 * time.Minute)
-	for range tick {
-		mdb.Expire()
-	}
+    tick := time.Tick(30 * time.Minute)
+    for range tick {
+        mdb.Expire()
+    }
 }
 ```
 
@@ -281,10 +281,10 @@ There is currently
             return nil
         },
     )
-	mdb := memdb.NewStore().
-		CreateIndex("make").
-		CreateIndex("model").
-		Persistent(p)
+    mdb := memdb.NewStore().
+        CreateIndex("make").
+        CreateIndex("model").
+        Persistent(p)
 ```
 
 
