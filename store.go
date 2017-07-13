@@ -26,6 +26,8 @@ type Store struct {
 	happens chan *happening
 	used    bool
 
+	persister Persister
+
 	insertNotifiers []NotifyFunc
 	updateNotifiers []NotifyFunc
 	removeNotifiers []NotifyFunc
@@ -149,12 +151,30 @@ func (s *Store) Unique() *Store {
 	return s
 }
 
+// Persistent adds a persister to the database and loads up the existing records, call after all indexes are setup but
+// before you begin using it.
+func (s *Store) Persistent(persister Persister) {
+	if s.used {
+		panic("Cannot make persist on in-use store")
+	}
+
+	s.used = true
+	s.persister = persister
+	s.Lock()
+	defer s.Unlock()
+	persister.Load(func(id string, indexer Indexer) {
+		w := s.wrapIt(indexer)
+		w.id = id
+		s.addWrap(w)
+	})
+}
+
 // Get returns an item equal to the passed item from the store
 func (s *Store) Get(search Indexer) Indexer {
 	s.RLock()
 	defer s.RUnlock()
 
-	found := s.backing.Get(&wrap{search, nil})
+	found := s.backing.Get(&wrap{indexer: search})
 	if found == nil {
 		return nil
 	}
@@ -263,7 +283,7 @@ func (s *Store) AscendStarting(at Indexer, cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
 
-	s.backing.AscendGreaterOrEqual(&wrap{at, nil}, func(item btree.Item) bool {
+	s.backing.AscendGreaterOrEqual(&wrap{indexer: at}, func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
 			return cb(w.indexer)
 		}
@@ -289,7 +309,7 @@ func (s *Store) DescendStarting(at Indexer, cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
 
-	s.backing.DescendLessOrEqual(&wrap{at, nil}, func(item btree.Item) bool {
+	s.backing.DescendLessOrEqual(&wrap{indexer: at}, func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
 			return cb(w.indexer)
 		}
@@ -456,9 +476,16 @@ func (s *Store) emit(event Event, old, new Indexer) {
 }
 
 func (s *Store) add(indexer Indexer) Indexer {
-	// We store a clone of the indexer as it needs to be immutable
-	s.used = true
 	w := s.wrapIt(indexer)
+	ret := s.addWrap(w)
+	if s.persister != nil {
+		s.persister.Save(w.ID(), indexer)
+	}
+	return ret
+}
+
+func (s *Store) addWrap(w *wrap) Indexer {
+	s.used = true
 	found := s.backing.ReplaceOrInsert(w)
 
 	var ow *wrap
@@ -473,10 +500,10 @@ func (s *Store) add(indexer Indexer) Indexer {
 			oldKey := ow.values[index.n]
 			if oldKey != key {
 				s.rmFromIndex(index.id, oldKey, ow.indexer)
-				emitted = s.addToIndex(index.id, key, indexer)
+				emitted = s.addToIndex(index.id, key, w.indexer)
 			}
 		} else {
-			emitted = s.addToIndex(index.id, key, indexer)
+			emitted = s.addToIndex(index.id, key, w.indexer)
 		}
 	}
 
@@ -522,9 +549,12 @@ func (s *Store) addToIndex(indexID string, key string, indexer Indexer) (emitted
 }
 
 func (s *Store) rm(indexer Indexer) Indexer {
-	removed := s.backing.Delete(&wrap{indexer, nil})
+	removed := s.backing.Delete(&wrap{indexer: indexer})
 	if removed != nil {
 		w := removed.(*wrap)
+		if s.persister != nil {
+			s.persister.Remove(w.ID())
+		}
 
 		for _, index := range s.indexes {
 			key := w.values[index.n]

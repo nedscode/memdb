@@ -7,6 +7,7 @@ import (
 	"flag"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -17,6 +18,41 @@ type X struct {
 	a int
 	b string
 	c string
+}
+
+// Storage is a mock memdb Persister that stores and loads from a map for testing purposes.
+type Storage struct {
+	sync.Mutex
+	Store map[string]Indexer
+}
+
+func NewMockStorage() *Storage {
+	return &Storage{
+		Store: map[string]Indexer{},
+	}
+}
+
+// Save is an implementation of the Persister.Save method
+func (s *Storage) Save(id string, indexer Indexer) {
+	s.Lock()
+	defer s.Unlock()
+	s.Store[id] = indexer
+}
+
+// Load is an implementation of the Persister.Load method
+func (s *Storage) Load(loadFunc LoadFunc) {
+	s.Lock()
+	defer s.Unlock()
+	for id, indexer := range s.Store {
+		loadFunc(id, indexer)
+	}
+}
+
+// Remove is an implementation of the Persister.Remove method
+func (s *Storage) Remove(id string) {
+	s.Lock()
+	defer s.Unlock()
+	delete(s.Store, id)
 }
 
 var (
@@ -144,8 +180,11 @@ func TestLookupNonPresentKey(t *testing.T) {
 
 func TestTraverse(t *testing.T) {
 	s := NewStore()
+	p := NewMockStorage()
+
 	s.CreateIndex("b")
 	s.CreateIndex("c")
+	s.Persistent(p)
 
 	v1 := &X{a: 1, b: "one:", c: "ZZZ"}
 	v2 := &X{a: 2, b: "two:", c: "ZZZ"}
@@ -161,6 +200,11 @@ func TestTraverse(t *testing.T) {
 	n := s.Len()
 	if n != 4 {
 		t.Errorf("Expected 4 items in length (got %d)", n)
+	}
+
+	n = len(p.Store)
+	if n != 4 {
+		t.Errorf("Expected 4 items in persitent store (got %d)", n)
 	}
 
 	k := s.Keys("b")
@@ -182,65 +226,7 @@ func TestTraverse(t *testing.T) {
 		return i != stop
 	}
 
-	got = ""
-	s.Ascend(iter)
-	expect = "one:two:four:eight:"
-	if got != expect {
-		t.Errorf("Traversed in wrong direction expected %s (got %s)", expect, got)
-	}
-
-	got = ""
-	s.Descend(iter)
-	expect = "eight:four:two:one:"
-	if got != expect {
-		t.Errorf("Traversed in wrong direction expected %s (got %s)", expect, got)
-	}
-
-	got = ""
-	s.DescendStarting(v3, iter)
-	expect = "two:one:"
-	if got != expect {
-		t.Errorf("Traversed in wrong direction expected %s (got %s)", expect, got)
-	}
-
-	got = ""
-	s.AscendStarting(v3, iter)
-	expect = "four:eight:"
-	if got != expect {
-		t.Errorf("Traversed in wrong direction expected %s (got %s)", expect, got)
-	}
-
-	got = ""
-	stop = v2
-	s.Ascend(iter)
-	expect = "one:two:"
-	if got != expect {
-		t.Errorf("Traversal didn't stop expected %s (got %s)", expect, got)
-	}
-
-	got = ""
-	stop = v4
-	s.Descend(iter)
-	expect = "eight:four:"
-	if got != expect {
-		t.Errorf("Traversal didn't stop expected %s (got %s)", expect, got)
-	}
-
-	got = ""
-	stop = v4
-	s.AscendStarting(v3, iter)
-	expect = "four:"
-	if got != expect {
-		t.Errorf("Traversal didn't stop expected %s (got %s)", expect, got)
-	}
-
-	got = ""
-	stop = v2
-	s.DescendStarting(v3, iter)
-	expect = "two:"
-	if got != expect {
-		t.Errorf("Traversal didn't stop expected %s (got %s)", expect, got)
-	}
+	performTraversals(t, s, iter, &got, &stop, v2, v3, v4)
 
 	expired = 4
 	s.Expire()
@@ -258,6 +244,11 @@ func TestTraverse(t *testing.T) {
 		t.Errorf("Expired item found by field (got %#v)", vals)
 	}
 
+	n = len(p.Store)
+	if n != 3 {
+		t.Errorf("Expected 3 items in persitent store (got %d)", n)
+	}
+
 	s.Delete(v2)
 
 	got = ""
@@ -265,6 +256,119 @@ func TestTraverse(t *testing.T) {
 	expect = "one:eight:"
 	if got != expect {
 		t.Errorf("Deleted item not removed expected %s (got %s)", expect, got)
+	}
+
+	n = len(p.Store)
+	if n != 2 {
+		t.Errorf("Expected 2 items in persitent store (got %d)", n)
+	}
+
+	verifyPersistentStore(p, t)
+
+	s2 := NewStore()
+	s2.Persistent(p)
+
+	n = s2.Len()
+	if n != 2 {
+		t.Errorf("Expected 2 items in new store (got %d)", n)
+	}
+
+	got = ""
+	s.Ascend(iter)
+	expect = "one:eight:"
+	if got != expect {
+		t.Errorf("Wrong items found in new store expected %s (got %s)", expect, got)
+	}
+}
+
+func verifyPersistentStore(p *Storage, t *testing.T) {
+	foundOne := false
+	foundEight := false
+	foundOther := false
+
+	for _, v := range p.Store {
+		if v.(*X).a == 1 {
+			foundOne = true
+		} else if v.(*X).a == 8 {
+			foundEight = true
+		} else {
+			foundOther = true
+		}
+	}
+
+	if !foundOne || !foundEight || foundOther {
+		t.Errorf("Wrong items found in persistent store")
+	}
+}
+
+func performTraversals(
+	t *testing.T,
+	s *Store,
+	iter func(i Indexer) bool,
+	got *string,
+	stop **X,
+	v2 *X,
+	v3 *X,
+	v4 *X,
+) {
+	*got = ""
+	s.Ascend(iter)
+	expect := "one:two:four:eight:"
+	if *got != expect {
+		t.Errorf("Traversed in wrong direction expected %s (got %s)", expect, *got)
+	}
+
+	*got = ""
+	s.Descend(iter)
+	expect = "eight:four:two:one:"
+	if *got != expect {
+		t.Errorf("Traversed in wrong direction expected %s (got %s)", expect, *got)
+	}
+
+	*got = ""
+	s.DescendStarting(v3, iter)
+	expect = "two:one:"
+	if *got != expect {
+		t.Errorf("Traversed in wrong direction expected %s (got %s)", expect, *got)
+	}
+
+	*got = ""
+	s.AscendStarting(v3, iter)
+	expect = "four:eight:"
+	if *got != expect {
+		t.Errorf("Traversed in wrong direction expected %s (got %s)", expect, *got)
+	}
+
+	*got = ""
+	*stop = v2
+	s.Ascend(iter)
+	expect = "one:two:"
+	if *got != expect {
+		t.Errorf("Traversal didn't stop expected %s (got %s)", expect, *got)
+	}
+
+	*got = ""
+	*stop = v4
+	s.Descend(iter)
+	expect = "eight:four:"
+	if *got != expect {
+		t.Errorf("Traversal didn't stop expected %s (got %s)", expect, *got)
+	}
+
+	*got = ""
+	*stop = v4
+	s.AscendStarting(v3, iter)
+	expect = "four:"
+	if *got != expect {
+		t.Errorf("Traversal didn't stop expected %s (got %s)", expect, *got)
+	}
+
+	*got = ""
+	*stop = v2
+	s.DescendStarting(v3, iter)
+	expect = "two:"
+	if *got != expect {
+		t.Errorf("Traversal didn't stop expected %s (got %s)", expect, *got)
 	}
 }
 
@@ -466,7 +570,7 @@ func TestUnsure(t *testing.T) {
 }
 
 func TestLess(t *testing.T) {
-	v1 := &wrap{&X{a: 1, b: "one:"}, nil}
+	v1 := &wrap{indexer: &X{a: 1, b: "one:"}}
 	vx := btree.Int(5)
 
 	if v1.Less(vx) {
