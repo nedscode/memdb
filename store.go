@@ -3,7 +3,9 @@ package memdb
 
 import (
 	"github.com/google/btree"
+	"github.com/nedscode/memdb/persist"
 
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -26,7 +28,7 @@ type Store struct {
 	happens chan *happening
 	used    bool
 
-	persister Persister
+	persister persist.Persister
 
 	insertNotifiers []NotifyFunc
 	updateNotifiers []NotifyFunc
@@ -153,7 +155,7 @@ func (s *Store) Unique() *Store {
 
 // Persistent adds a persister to the database and loads up the existing records, call after all indexes are setup but
 // before you begin using it.
-func (s *Store) Persistent(persister Persister) error {
+func (s *Store) Persistent(persister persist.Persister) error {
 	if s.used {
 		panic("Cannot make persist on in-use store")
 	}
@@ -164,11 +166,22 @@ func (s *Store) Persistent(persister Persister) error {
 	s.Lock()
 	defer s.Unlock()
 
-	return persister.Load(func(id string, indexer Indexer) {
-		w := s.wrapIt(indexer)
-		w.id = id
-		s.addWrap(w)
+	var loaderErr error
+	err := persister.Load(func(id string, indexer interface{}) {
+		if idx, ok := indexer.(Indexer); ok {
+			w := s.wrapIt(idx)
+			w.id = id
+			s.addWrap(w)
+		} else {
+			loaderErr = fmt.Errorf("Error converting item %T to Indexer", indexer)
+		}
 	})
+
+	if err == nil {
+		err = loaderErr
+	}
+
+	return err
 }
 
 // Get returns an item equal to the passed item from the store

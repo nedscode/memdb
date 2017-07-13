@@ -75,7 +75,7 @@ func TestStorage(t *testing.T) {
 		}
 	}
 
-	s.Load(func(idIn string, indexer memdb.Indexer) {
+	s.Load(func(idIn string, indexer interface{}) {
 		if idIn != id {
 			t.Errorf("Didn't get expected ID on load %s (expected %s)", idIn, id)
 		}
@@ -164,7 +164,7 @@ func TestLoadUnreadable(t *testing.T) {
 	}
 
 	s.folder = "/dev/zero"
-	if err = s.Load(func(id string, indexer memdb.Indexer) {}); err == nil {
+	if err = s.Load(func(id string, indexer interface{}) {}); err == nil {
 		t.Errorf("Expected error saving to bad folder")
 	}
 }
@@ -196,11 +196,6 @@ func TestLoadUnparse(t *testing.T) {
 	err = s.unmarshalItem([]byte("NotJSON"), &Y{})
 	if err == nil {
 		t.Errorf("Expected error getting item from bad JSON")
-	}
-
-	_, err = s.getIndexer(s)
-	if err == nil {
-		t.Errorf("Expected error getting indexer from non-indexer")
 	}
 
 	err = s.removeFile("/tmp")

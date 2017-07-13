@@ -1,7 +1,7 @@
 package filepersist
 
 import (
-	"github.com/nedscode/memdb"
+	"github.com/nedscode/memdb/persist"
 
 	"encoding/json"
 	"fmt"
@@ -15,13 +15,13 @@ import (
 // to use this persister, you should ensure your Indexers are JSON Marshalable.
 type Storage struct {
 	folder  string
-	factory memdb.FactoryFunc
+	factory persist.FactoryFunc
 }
 
 // NewFileStorage creates a new Storage Persister at the designated folder
 // folder is the directory to store the files in
 // factory is a factory function that can instantiate a new instance of an Indexer
-func NewFileStorage(folder string, factory memdb.FactoryFunc) (*Storage, error) {
+func NewFileStorage(folder string, factory persist.FactoryFunc) (*Storage, error) {
 	if err := os.Mkdir(folder, 0755); err != nil && os.IsNotExist(err) {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (s *Storage) writeFile(name string, data []byte) error {
 }
 
 // Save is an implementation of the Persister.Save method
-func (s *Storage) Save(id string, indexer memdb.Indexer) error {
+func (s *Storage) Save(id string, indexer interface{}) error {
 	data, err := json.Marshal(indexer)
 	if err != nil {
 		return fmt.Errorf("Indexer objects must be JSON marshallable to use FilePersist storage\n%#v\n", err)
@@ -102,15 +102,8 @@ func (s *Storage) unmarshalItem(data []byte, item interface{}) error {
 	return nil
 }
 
-func (s *Storage) getIndexer(item interface{}) (memdb.Indexer, error) {
-	if indexer, ok := item.(memdb.Indexer); ok {
-		return indexer, nil
-	}
-	return nil, fmt.Errorf("Unable to load item of type %T. It is not a Indexer", item)
-}
-
 // Load is an implementation of the Persister.Load method
-func (s *Storage) Load(loadFunc memdb.LoadFunc) error {
+func (s *Storage) Load(loadFunc persist.LoadFunc) error {
 	dir, err := ioutil.ReadDir(s.folder)
 	if err != nil {
 		return fmt.Errorf("Unable to read directory %s: %#v", s.folder, err)
@@ -124,9 +117,8 @@ func (s *Storage) Load(loadFunc memdb.LoadFunc) error {
 			data, err := s.readFile(name)
 
 			var (
-				c       *container
-				item    interface{}
-				indexer memdb.Indexer
+				c    *container
+				item interface{}
 			)
 
 			if err == nil {
@@ -142,11 +134,7 @@ func (s *Storage) Load(loadFunc memdb.LoadFunc) error {
 			}
 
 			if err == nil {
-				indexer, err = s.getIndexer(item)
-			}
-
-			if err == nil {
-				loadFunc(c.ID, indexer)
+				loadFunc(c.ID, item)
 			}
 
 			if err != nil {

@@ -2,6 +2,7 @@ package memdb
 
 import (
 	"github.com/google/btree"
+	"github.com/nedscode/memdb/persist"
 
 	"context"
 	"flag"
@@ -33,15 +34,15 @@ func NewMockStorage() *Storage {
 }
 
 // Save is an implementation of the Persister.Save method
-func (s *Storage) Save(id string, indexer Indexer) error {
+func (s *Storage) Save(id string, indexer interface{}) error {
 	s.Lock()
 	defer s.Unlock()
-	s.Store[id] = indexer
+	s.Store[id] = indexer.(Indexer)
 	return nil
 }
 
 // Load is an implementation of the Persister.Load method
-func (s *Storage) Load(loadFunc LoadFunc) error {
+func (s *Storage) Load(loadFunc persist.LoadFunc) error {
 	s.Lock()
 	defer s.Unlock()
 	for id, indexer := range s.Store {
