@@ -7,22 +7,22 @@ import (
 )
 
 type car struct {
-	make    string
-	model   string
-	sales   float64
-	expired bool
+	Make    string
+	Model   string
+	Sales   float64
+	Expired bool
 }
 
 func (i *car) Less(other memdb.Indexer) bool {
 	switch o := other.(type) {
 	case *car:
-		if i.make < o.make {
+		if i.Make < o.Make {
 			return true
 		}
-		if i.make > o.make {
+		if i.Make > o.Make {
 			return false
 		}
-		if i.model < o.model {
+		if i.Model < o.Model {
 			return true
 		}
 		return false
@@ -31,22 +31,22 @@ func (i *car) Less(other memdb.Indexer) bool {
 }
 
 func (i *car) IsExpired() bool {
-	return i.expired
+	return i.Expired
 }
 
 func (i *car) GetField(field string) string {
 	switch field {
 	case "make":
-		return i.make
+		return i.Make
 	case "model":
-		return i.model
+		return i.Model
 	default:
 		return "" // Indicates should not be indexed
 	}
 }
 
 func (i *car) String() string {
-	return fmt.Sprintf("%s %s [$%0.02f/m]", i.make, i.model, i.sales)
+	return fmt.Sprintf("%s %s [$%0.02f/m]", i.Make, i.Model, i.Sales)
 }
 
 func main() {
@@ -54,26 +54,26 @@ func main() {
 		CreateIndex("make").
 		CreateIndex("model")
 
-	mdb.Put(&car{make: "Ford", model: "Fiesta", sales: 1375449.73})
-	mdb.Put(&car{make: "Ford", model: "Focus", sales: 7033248.90})
-	mdb.Put(&car{make: "Holden", model: "Astra", sales: 8613642.89})
-	mdb.Put(&car{make: "Holden", model: "Cruze", sales: 6072660.32})
-	mdb.Put(&car{make: "Honda", model: "Jazz", sales: 7899950.33})
-	mdb.Put(&car{make: "Honda", model: "Civic", sales: 9082843.40})
-	mdb.Put(&car{make: "Hyundai", model: "i20", sales: 5341543.43})
-	mdb.Put(&car{make: "Hyundai", model: "i30", sales: 1171906.40})
-	mdb.Put(&car{make: "Kia", model: "Rio", sales: 4473199.22})
-	mdb.Put(&car{make: "Kia", model: "Sportage", sales: 2428186.91})
-	mdb.Put(&car{make: "Mitsubishi", model: "ASX", sales: 480031.27})
-	mdb.Put(&car{make: "Mitsubishi", model: "Mirage", sales: 9487237.84})
-	mdb.Put(&car{make: "Mitsubishi", model: "Outlander", sales: 8152048.82})
-	mdb.Put(&car{make: "Nissan", model: "Juke", sales: 6436598.01})
-	mdb.Put(&car{make: "Nissan", model: "Micra", sales: 5039032.35})
-	mdb.Put(&car{make: "Renault", model: "Clio", sales: 110842.73})
-	mdb.Put(&car{make: "Renault", model: "Megane", sales: 8131321.16})
-	mdb.Put(&car{make: "Suzuki", model: "Jimny", sales: 8388076.64, expired: true})
-	mdb.Put(&car{make: "Suzuki", model: "Swift", sales: 6270911.37})
-	mdb.Put(&car{make: "Vauxhall", model: "Astra", sales: 9883699.82})
+	mdb.Put(&car{Make: "Ford", Model: "Fiesta", Sales: 1375449.73})
+	mdb.Put(&car{Make: "Ford", Model: "Focus", Sales: 7033248.90})
+	mdb.Put(&car{Make: "Holden", Model: "Astra", Sales: 8613642.89})
+	mdb.Put(&car{Make: "Holden", Model: "Cruze", Sales: 6072660.32})
+	mdb.Put(&car{Make: "Honda", Model: "Jazz", Sales: 7899950.33})
+	mdb.Put(&car{Make: "Honda", Model: "Civic", Sales: 9082843.40})
+	mdb.Put(&car{Make: "Hyundai", Model: "i20", Sales: 5341543.43})
+	mdb.Put(&car{Make: "Hyundai", Model: "i30", Sales: 1171906.40})
+	mdb.Put(&car{Make: "Kia", Model: "Rio", Sales: 4473199.22})
+	mdb.Put(&car{Make: "Kia", Model: "Sportage", Sales: 2428186.91})
+	mdb.Put(&car{Make: "Mitsubishi", Model: "ASX", Sales: 480031.27})
+	mdb.Put(&car{Make: "Mitsubishi", Model: "Mirage", Sales: 9487237.84})
+	mdb.Put(&car{Make: "Mitsubishi", Model: "Outlander", Sales: 8152048.82})
+	mdb.Put(&car{Make: "Nissan", Model: "Juke", Sales: 6436598.01})
+	mdb.Put(&car{Make: "Nissan", Model: "Micra", Sales: 5039032.35})
+	mdb.Put(&car{Make: "Renault", Model: "Clio", Sales: 110842.73})
+	mdb.Put(&car{Make: "Renault", Model: "Megane", Sales: 8131321.16})
+	mdb.Put(&car{Make: "Suzuki", Model: "Jimny", Sales: 8388076.64, Expired: true})
+	mdb.Put(&car{Make: "Suzuki", Model: "Swift", Sales: 6270911.37})
+	mdb.Put(&car{Make: "Vauxhall", Model: "Astra", Sales: 9883699.82})
 
 	indexers := mdb.In("Model").Lookup("Astra")
 	fmt.Println("Found Astra models:")
@@ -81,10 +81,10 @@ func main() {
 		fmt.Println(indexer.(*car).String())
 	}
 
-	indexer := mdb.Get(&car{make: "Kia", model: "Rio"}).(*car)
-	fmt.Printf("The Kia Rio made $%0.02f in sales this month\n", indexer.sales)
+	indexer := mdb.Get(&car{Make: "Kia", Model: "Rio"}).(*car)
+	fmt.Printf("The Kia Rio made $%0.02f in sales this month\n", indexer.Sales)
 
-	mdb.Delete(&car{make: "Nissan", model: "Juke"})
+	mdb.Delete(&car{Make: "Nissan", Model: "Juke"})
 
 	indexers = mdb.In("make").Lookup("Nissan")
 	fmt.Println("Found Nissan makes:")
@@ -93,9 +93,9 @@ func main() {
 	}
 
 	fmt.Println("Iterating over cars > Nissan:")
-	mdb.AscendStarting(&car{make: "Nissan"}, func(indexer memdb.Indexer) bool {
+	mdb.AscendStarting(&car{Make: "Nissan"}, func(indexer memdb.Indexer) bool {
 		c, _ := indexer.(*car)
-		if c.make == "Suzuki" {
+		if c.Make == "Suzuki" {
 			// Not interested any more
 			return false
 		}

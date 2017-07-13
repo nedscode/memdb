@@ -36,9 +36,9 @@ Define your struct as normal:
 
 ```golang
 type car struct {
-	make    string
-	model   string
-	rrp     int
+	Make    string
+	Model   string
+	RRP     int
 }
 ```
 
@@ -53,13 +53,13 @@ determine the order.
 func (i *car) Less(other memdb.Indexer) bool {
 	switch o := other.(type) {
 	case *car:
-		if i.make < o.make {
+		if i.Make < o.Make {
 			return true
 		}
-		if i.make > o.make {
+		if i.Make > o.Make {
 			return false
 		}
-		if i.model < o.model {
+		if i.Model < o.Model {
 			return true
 		}
 		return false
@@ -84,9 +84,9 @@ and stored as strings:
 func (i *car) GetField(field string) string {
 	switch field {
 	case "make":
-		return i.make
+		return i.Make
 	case "model":
-		return i.model
+		return i.Model
 	default:
 		return "" // Indicates should not be indexed
 	}
@@ -122,10 +122,10 @@ Putting an item with the same value as a unique index will cause the previous it
 
 ```golang
     type car struct {
-	    make    string
-    	model   string
-	    rrp     int
-	    vin     string
+	    Make    string
+    	Model   string
+	    RRP     int
+	    Vin     string
     }
 
     mdb.CreateIndex("vin").Unique()
@@ -136,9 +136,9 @@ Putting an item with the same value as a unique index will cause the previous it
 Saving items into the store is simple:
 
 ```golang
-	mdb.Put(&car{make: "Ford", model: "Fiesta", rrp: 27490})
-	mdb.Put(&car{make: "Holden", model: "Astra", rrp: 24190})
-	mdb.Put(&car{make: "Honda", model: "Jazz", rrp: 19790})
+	mdb.Put(&car{Make: "Ford", Model: "Fiesta", RRP: 27490})
+	mdb.Put(&car{Make: "Holden", Model: "Astra", RRP: 24190})
+	mdb.Put(&car{Make: "Honda", Model: "Jazz", RRP: 19790})
 ```
 
 ## Retrieving an item
@@ -147,8 +147,8 @@ In order to retrieve an item, supply an eqivalent item as a search parameter, yo
 the search object to be deemed equivalent by your Less function:
 
 ```golang
-	vehicle := mdb.Get(&car{make: "Holden", model: "Astra"}).(*car)
-	fmt.Printf("Vehicle RRP is $%d\n", vehicle.rrp)
+	vehicle := mdb.Get(&car{Make: "Holden", Model: "Astra"}).(*car)
+	fmt.Printf("Vehicle RRP is $%d\n", vehicle.RRP)
 ```
 
 ## Looking up items by indexed field
@@ -159,7 +159,7 @@ This is where it starts to get interesting, we can lookup items by any of our de
 	indexers := mdb.In("model").Lookup("Astra")
 	for _, indexer := range indexers {
 	    vehicle := indexer.(*car)
-		fmt.Printf("%s %s ($%d rrp)\n", vehicle.make, vehicle.model, vehicle.rrp)
+		fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
 	}
 ```
 
@@ -186,7 +186,7 @@ Use the functions by providing an iterator that returns false to stop traversal 
 	count := 0
 	mdb.Ascend(func(indexer memdb.Indexer) bool {
 		vehicle := indexer.(*car)
-		fmt.Printf("%s %s ($%d rrp)\n", vehicle.make, vehicle.model, vehicle.rrp)
+		fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
 		count++
 		return true
 	})
@@ -198,7 +198,7 @@ If you wish to traverse your simple or compound indexed fields, you may also do 
 ```golang
     mdb.In("make", "model").Each(func(indexer memdb.Indexer) bool {
 		vehicle := indexer.(*car)
-		fmt.Printf("%s %s ($%d rrp)\n", vehicle.make, vehicle.model, vehicle.rrp)
+		fmt.Printf("%s %s ($%d rrp)\n", vehicle.Make, vehicle.Model, vehicle.RRP)
     }, "Holden", "Astra")
 ```
 
@@ -217,6 +217,14 @@ Item notification can be performed via the On(event, callback) method:
     mdb.On(memdb.Expiry, notify)
 ```
 
+## Removal
+
+Items can be removed directly by calling the Delete function
+
+```golang
+    mdb.Delete(&car{Make: "Holden", Model: "Astra"})
+```
+
 ## Expiry
 
 Item expiry can be achieved by defining an expiry condition function and scheduling the expiry function.
@@ -225,10 +233,10 @@ Say we expanded the car struct to have a sold time
 
 ```golang
 type car struct {
-	make    string
-	model   string
-	rrp     int
-	sold    time.Time
+	Make    string
+	Model   string
+	RRP     int
+	Sold    time.Time
 }
 ```
 
@@ -236,7 +244,7 @@ Then changed the IsExpired method like:
 
 ```golang
 func (i *car) IsExpired() bool {
-	return i.sold.Before(time.Now().Sub(24 * time.Hour))
+	return i.Sold.Before(time.Now().Sub(24 * time.Hour))
 }
 ```
 
@@ -252,6 +260,33 @@ go func() {
 ```
 
 Now every 30 minutes, we will expire cars sold more than 24 hours ago from our listings.
+
+## Persistence
+
+Sometimes you want to have your cake and eat it too. While this is an in-memory database,
+we also support store-on-put and load-at-create style persistence.
+
+This is achieved by adding a Persister to the store after adding indexes and before beginning
+to use it.
+
+There is currently 
+
+```golang
+    p := filepersist.NewFileStorage(
+        "/tmp/mydata",
+        func(indexerType string) interface{} {
+            if (indexerType == "*main.car") {
+                return &car{}
+            }
+            return nil
+        },
+    )
+	mdb := memdb.NewStore().
+		CreateIndex("make").
+		CreateIndex("model").
+		Persistent(p)
+```
+
 
 ## License
 

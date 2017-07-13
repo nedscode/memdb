@@ -29,6 +29,22 @@ func (x *X) GetField(f string) string {
 	return x.B
 }
 
+type Y struct {
+	Bad chan int `json:"Bad"`
+}
+
+func (y *Y) Less(o memdb.Indexer) bool {
+	return false
+}
+
+func (y *Y) IsExpired() bool {
+	return false
+}
+
+func (y *Y) GetField(f string) string {
+	return ""
+}
+
 func TestStorage(t *testing.T) {
 	s, err := NewFileStorage("/tmp/filestore", func(indexerType string) interface{} {
 		if indexerType != "*filepersist.X" {
@@ -85,4 +101,110 @@ func TestStorage(t *testing.T) {
 		t.Errorf("Expected file to be deleted")
 	}
 
+}
+
+func TestInvalidFolder(t *testing.T) {
+	_, err := NewFileStorage("/invalid/directory", func(indexerType string) interface{} {
+		return nil
+	})
+
+	if err == nil {
+		t.Errorf("Expected error on invalid directory")
+	}
+}
+
+func TestUnauthFolder(t *testing.T) {
+	_, err := NewFileStorage("/dev/zero", func(indexerType string) interface{} {
+		return nil
+	})
+
+	if err == nil {
+		t.Errorf("Expected error on unauthorized folder")
+	}
+}
+
+func TestSaveUnmarshalable(t *testing.T) {
+	s, err := NewFileStorage("/tmp/filestore", func(indexerType string) interface{} {
+		return nil
+	})
+
+	if err != nil {
+		t.Errorf("Unexpected error creating new storage: %#v", err)
+	}
+
+	bad := &Y{}
+	if err = s.Save("123456789012", bad); err == nil {
+		t.Errorf("Expected error saving unmarshalable indexer")
+	}
+}
+
+func TestSaveUnwriteable(t *testing.T) {
+	s, err := NewFileStorage("/tmp/filestore", func(indexerType string) interface{} {
+		return nil
+	})
+
+	if err != nil {
+		t.Errorf("Unexpected error creating new storage: %#v", err)
+	}
+
+	s.folder = "/dev/zero"
+	test := &X{}
+	if err = s.Save("123456789012", test); err == nil {
+		t.Errorf("Expected error saving to bad folder")
+	}
+}
+
+func TestLoadUnreadable(t *testing.T) {
+	s, err := NewFileStorage("/tmp/filestore", func(indexerType string) interface{} {
+		return nil
+	})
+
+	if err != nil {
+		t.Errorf("Unexpected error creating new storage: %#v", err)
+	}
+
+	s.folder = "/dev/zero"
+	if err = s.Load(func(id string, indexer memdb.Indexer) {}); err == nil {
+		t.Errorf("Expected error saving to bad folder")
+	}
+}
+
+func TestLoadUnparse(t *testing.T) {
+	s, err := NewFileStorage("/tmp/filestore", func(indexerType string) interface{} {
+		return nil
+	})
+
+	if err != nil {
+		t.Errorf("Unexpected error creating new storage: %#v", err)
+	}
+
+	_, err = s.readFile("/non-existent")
+	if err == nil {
+		t.Errorf("Expected error reading non-existent file")
+	}
+
+	_, err = s.getContainer([]byte("NotJSON"))
+	if err == nil {
+		t.Errorf("Expected error reading bad JSON")
+	}
+
+	_, err = s.newItem("Unknown")
+	if err == nil {
+		t.Errorf("Expected error factorying unknown type")
+	}
+
+	err = s.unmarshalItem([]byte("NotJSON"), &Y{})
+	if err == nil {
+		t.Errorf("Expected error getting item from bad JSON")
+	}
+
+	_, err = s.getIndexer(s)
+	if err == nil {
+		t.Errorf("Expected error getting indexer from non-indexer")
+	}
+
+	err = s.removeFile("/tmp")
+	if err == nil {
+		t.Errorf("Expected error removing not-a-file")
+	}
 }

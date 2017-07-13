@@ -9,11 +9,11 @@ type LoadFunc func(id string, indexer Indexer)
 // Persister is an interface to allow different means of persistent storage to be used with memdb
 type Persister interface {
 	// Save is called to request persistent save of the indexer with id
-	Save(id string, indexer Indexer)
+	Save(id string, indexer Indexer) error
 
 	// Load is called at create time to load all of the persisted items and call loadFunc with each
-	Load(loadFunc LoadFunc)
+	Load(loadFunc LoadFunc) error
 
 	// Remove is called when an indexer is expired or deleted and needs removal from persistent store
-	Remove(id string)
+	Remove(id string) error
 }

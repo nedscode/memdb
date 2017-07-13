@@ -153,16 +153,18 @@ func (s *Store) Unique() *Store {
 
 // Persistent adds a persister to the database and loads up the existing records, call after all indexes are setup but
 // before you begin using it.
-func (s *Store) Persistent(persister Persister) {
+func (s *Store) Persistent(persister Persister) error {
 	if s.used {
 		panic("Cannot make persist on in-use store")
 	}
 
 	s.used = true
 	s.persister = persister
+
 	s.Lock()
 	defer s.Unlock()
-	persister.Load(func(id string, indexer Indexer) {
+
+	return persister.Load(func(id string, indexer Indexer) {
 		w := s.wrapIt(indexer)
 		w.id = id
 		s.addWrap(w)
@@ -355,11 +357,12 @@ func (s *Store) Expire() int {
 }
 
 // Put places an indexer item into the store
-func (s *Store) Put(indexer Indexer) Indexer {
+func (s *Store) Put(indexer Indexer) (Indexer, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	old := s.add(indexer)
+	old, err := s.add(indexer)
+
 	if old == nil {
 		s.happens <- &happening{
 			event: Insert,
@@ -373,7 +376,7 @@ func (s *Store) Put(indexer Indexer) Indexer {
 		}
 	}
 
-	return old
+	return old, err
 }
 
 // Delete removes an item equal to the search item
@@ -475,13 +478,16 @@ func (s *Store) emit(event Event, old, new Indexer) {
 	}
 }
 
-func (s *Store) add(indexer Indexer) Indexer {
+func (s *Store) add(indexer Indexer) (Indexer, error) {
 	w := s.wrapIt(indexer)
 	ret := s.addWrap(w)
+
+	var err error
 	if s.persister != nil {
-		s.persister.Save(w.ID(), indexer)
+		err = s.persister.Save(w.ID(), indexer)
 	}
-	return ret
+
+	return ret, err
 }
 
 func (s *Store) addWrap(w *wrap) Indexer {
@@ -548,12 +554,14 @@ func (s *Store) addToIndex(indexID string, key string, indexer Indexer) (emitted
 	return
 }
 
-func (s *Store) rm(indexer Indexer) Indexer {
+func (s *Store) rm(indexer Indexer) (Indexer, error) {
 	removed := s.backing.Delete(&wrap{indexer: indexer})
+
+	var err error
 	if removed != nil {
 		w := removed.(*wrap)
 		if s.persister != nil {
-			s.persister.Remove(w.ID())
+			err = s.persister.Remove(w.ID())
 		}
 
 		for _, index := range s.indexes {
@@ -563,9 +571,9 @@ func (s *Store) rm(indexer Indexer) Indexer {
 	}
 
 	if removed != nil {
-		return removed.(*wrap).indexer
+		return removed.(*wrap).indexer, err
 	}
-	return nil
+	return nil, err
 }
 
 func (s *Store) rmFromIndex(indexID string, key string, indexer Indexer) {

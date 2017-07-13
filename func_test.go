@@ -33,26 +33,29 @@ func NewMockStorage() *Storage {
 }
 
 // Save is an implementation of the Persister.Save method
-func (s *Storage) Save(id string, indexer Indexer) {
+func (s *Storage) Save(id string, indexer Indexer) error {
 	s.Lock()
 	defer s.Unlock()
 	s.Store[id] = indexer
+	return nil
 }
 
 // Load is an implementation of the Persister.Load method
-func (s *Storage) Load(loadFunc LoadFunc) {
+func (s *Storage) Load(loadFunc LoadFunc) error {
 	s.Lock()
 	defer s.Unlock()
 	for id, indexer := range s.Store {
 		loadFunc(id, indexer)
 	}
+	return nil
 }
 
 // Remove is an implementation of the Persister.Remove method
-func (s *Storage) Remove(id string) {
+func (s *Storage) Remove(id string) error {
 	s.Lock()
 	defer s.Unlock()
 	delete(s.Store, id)
+	return nil
 }
 
 var (
@@ -615,4 +618,17 @@ func TestEventString(t *testing.T) {
 	if bad.String() != "Unknown event" {
 		t.Errorf("Event unknown string incorrect")
 	}
+}
+
+func TestPersistentAfterUse(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("The code did not panic")
+		}
+	}()
+
+	s := NewStore()
+	p := NewMockStorage()
+	s.Put(&X{})
+	s.Persistent(p)
 }

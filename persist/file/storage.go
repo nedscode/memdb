@@ -44,84 +44,129 @@ type container struct {
 	Item json.RawMessage `json:"item"`
 }
 
+func (s *Storage) writeFile(name string, data []byte) error {
+	err := ioutil.WriteFile(name, data, 0644)
+	if err != nil {
+		return fmt.Errorf("Failed to write indexer object to file %s\n%#v\n", name, err)
+	}
+	return nil
+}
+
 // Save is an implementation of the Persister.Save method
-func (s *Storage) Save(id string, indexer memdb.Indexer) {
+func (s *Storage) Save(id string, indexer memdb.Indexer) error {
 	data, err := json.Marshal(indexer)
 	if err != nil {
-		fmt.Printf("Indexer objects must be JSON marshallable to use FilePersist\n%#v\n", err)
-		return
+		return fmt.Errorf("Indexer objects must be JSON marshallable to use FilePersist storage\n%#v\n", err)
 	}
 
-	data, err = json.Marshal(&container{
+	data, _ = json.Marshal(&container{
 		ID:   id,
 		Type: fmt.Sprintf("%T", indexer),
 		Item: data,
 	})
-	if err != nil {
-		fmt.Printf("Unable to marshal container\n%#v\n", err)
-		return
-	}
 
 	name := path.Join(s.folder, id+".json")
-	err = ioutil.WriteFile(name, data, 0644)
+	return s.writeFile(name, data)
+}
+
+func (s *Storage) readFile(name string) ([]byte, error) {
+	data, err := ioutil.ReadFile(name)
 	if err != nil {
-		fmt.Printf("Failed to write indexer object to file %s\n%#v\n", name, err)
-		return
+		return nil, fmt.Errorf("Unable to read file %s: %#v", name, err)
 	}
+	return data, nil
+}
+
+func (s *Storage) getContainer(data []byte) (*container, error) {
+	c := &container{}
+	err := json.Unmarshal(data, c)
+	if err != nil {
+		err = fmt.Errorf("Unable to decode container: %#v", err)
+	}
+	return c, err
+}
+
+func (s *Storage) newItem(t string) (interface{}, error) {
+	item := s.factory(t)
+	if item == nil {
+		return nil, fmt.Errorf("Unable to get factory for type %s", t)
+	}
+	return item, nil
+}
+
+func (s *Storage) unmarshalItem(data []byte, item interface{}) error {
+	err := json.Unmarshal(data, item)
+	if err != nil {
+		return fmt.Errorf("Unable to unmarshal item for type %T: %#v", item, err)
+	}
+	return nil
+}
+
+func (s *Storage) getIndexer(item interface{}) (memdb.Indexer, error) {
+	if indexer, ok := item.(memdb.Indexer); ok {
+		return indexer, nil
+	}
+	return nil, fmt.Errorf("Unable to load item of type %T. It is not a Indexer", item)
 }
 
 // Load is an implementation of the Persister.Load method
-func (s *Storage) Load(loadFunc memdb.LoadFunc) {
+func (s *Storage) Load(loadFunc memdb.LoadFunc) error {
 	dir, err := ioutil.ReadDir(s.folder)
 	if err != nil {
-		fmt.Printf("Unable to read directory %s\n%#v\n", s.folder, err)
-		return
+		return fmt.Errorf("Unable to read directory %s: %#v", s.folder, err)
 	}
 
+	var lastErr error
 	for _, fi := range dir {
 		nom := strings.Split(fi.Name(), ".")
 		if len(nom) == 2 && len(nom[0]) == 12 && nom[1] == "json" {
 			name := path.Join(s.folder, fi.Name())
+			data, err := s.readFile(name)
 
-			data, err := ioutil.ReadFile(name)
-			if err != nil {
-				fmt.Printf("Unable to read file %s\n%#v\n", name, err)
-				continue
+			var (
+				c       *container
+				item    interface{}
+				indexer memdb.Indexer
+			)
+
+			if err == nil {
+				c, err = s.getContainer(data)
 			}
 
-			c := &container{}
-			err = json.Unmarshal(data, c)
-			if err != nil {
-				fmt.Printf("Unable to decode container\n%#v\n", err)
-				continue
+			if err == nil {
+				item, err = s.newItem(c.Type)
 			}
 
-			item := s.factory(c.Type)
-			if item == nil {
-				fmt.Printf("Unable to get factory for type %s\n", c.Type)
-				continue
+			if err == nil {
+				err = s.unmarshalItem(c.Item, item)
 			}
 
-			err = json.Unmarshal(c.Item, item)
-			if err != nil {
-				fmt.Printf("Unable to unmarshal item for type %s\n%#v\n", c.Type, err)
-				continue
+			if err == nil {
+				indexer, err = s.getIndexer(item)
 			}
 
-			if indexer, ok := item.(memdb.Indexer); ok {
+			if err == nil {
 				loadFunc(c.ID, indexer)
-			} else {
-				fmt.Printf("Unable to load item of type %s (%T). It is not a Indexer\n", c.Type, item)
+			}
+
+			if err != nil {
+				lastErr = err
 			}
 		}
 	}
+
+	return lastErr
+}
+
+func (s *Storage) removeFile(name string) error {
+	if err := os.Remove(name); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("Failed to remove file %s\n%#v\n", name, err)
+	}
+	return nil
 }
 
 // Remove is an implementation of the Persister.Remove method
-func (s *Storage) Remove(id string) {
+func (s *Storage) Remove(id string) error {
 	name := path.Join(s.folder, id+".json")
-	if err := os.Remove(name); err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Failed to remove file %s\n%#v\n", name, err)
-		return
-	}
+	return s.removeFile(name)
 }
