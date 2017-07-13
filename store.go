@@ -344,7 +344,7 @@ func (s *Store) Expire() int {
 	defer s.Unlock()
 
 	for _, v := range rm {
-		old := s.rm(v)
+		old, _ := s.rm(v)
 		if old != nil {
 			s.happens <- &happening{
 				event: Expiry,
@@ -380,18 +380,18 @@ func (s *Store) Put(indexer Indexer) (Indexer, error) {
 }
 
 // Delete removes an item equal to the search item
-func (s *Store) Delete(search Indexer) Indexer {
+func (s *Store) Delete(search Indexer) (Indexer, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	old := s.rm(search)
+	old, err := s.rm(search)
 	if old != nil {
 		s.happens <- &happening{
 			event: Remove,
 			old:   old,
 		}
 	}
-	return old
+	return old, err
 }
 
 // Len returns the number of items in the database
@@ -538,7 +538,7 @@ func (s *Store) addToIndex(indexID string, key string, indexer Indexer) (emitted
 	if index.unique && len(items) > 0 {
 		// Items have been replaced!
 		for _, item := range indexItems[key] {
-			rm := s.rm(item)
+			rm, _ := s.rm(item)
 			if rm != nil {
 				s.happens <- &happening{
 					event: Update,
