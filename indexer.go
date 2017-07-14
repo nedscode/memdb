@@ -1,6 +1,7 @@
 package memdb
 
-// Iterator is a callback function definition that processes each item iteratively from functions like Ascend, Descend etc
+// Iterator is a callback function definition that processes each item iteratively from functions like
+// Ascend, Descend etc
 type Iterator func(i Indexer) bool
 
 // Indexer is an item that can be stored in the store

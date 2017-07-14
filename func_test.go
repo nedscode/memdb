@@ -129,16 +129,11 @@ func TestGet(t *testing.T) {
 	orig := &X{a: 1}
 	s.Put(orig)
 	v := s.Get(&X{a: 1})
-	if orig != v {
+	if v != orig {
 		t.Errorf("Gotten value should be same as original instance")
 	}
-}
 
-func TestNoGet(t *testing.T) {
-	s := NewStore()
-	orig := &X{a: 1}
-	s.Put(orig)
-	v := s.Get(&X{a: 2})
+	v = s.Get(&X{a: 2})
 	if v != nil {
 		t.Errorf("Gotten value should be nil (not present)")
 	}
@@ -170,13 +165,8 @@ func TestLookupInvalidField(t *testing.T) {
 	if vals != nil {
 		t.Errorf("Lookup of invalid field should be nil (was %#v)", vals)
 	}
-}
 
-func TestLookupNonPresentKey(t *testing.T) {
-	s := NewStore()
-	s.CreateIndex("b")
-	s.Put(&X{a: 1, b: "test"})
-	vals := s.In("b").Lookup("dumb")
+	vals = s.In("b").Lookup("dumb")
 	if vals != nil {
 		t.Errorf("Lookup of non-present key should be nil (was %#v)", vals)
 	}
@@ -405,7 +395,17 @@ func TestEach(t *testing.T) {
 }
 
 func upTo(ms int) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 10*time.Millisecond)
+	return context.WithTimeout(context.Background(), time.Duration(ms)*time.Millisecond)
+}
+
+func notificateText(t *testing.T, s *Store, text, what string, expect Indexer) {
+	if expect == nil {
+		if s.index["b"][text] != nil {
+			t.Errorf("Expected b one: index to be nil")
+		}
+	} else if len(s.index["b"][text]) != 1 || s.index["b"][text][0] != expect {
+		t.Errorf("Expected b %s: index to be %s", text, what)
+	}
 }
 
 func TestNotificates(t *testing.T) {
@@ -432,20 +432,9 @@ func TestNotificates(t *testing.T) {
 		if new != expectNew {
 			t.Errorf("Expected %#v new value %#v (got %#v)", event, expectNew, new)
 		}
-		if expectOne == nil {
-			if s.index["b"]["one:"] != nil {
-				t.Errorf("Expected b one: index to be nil")
-			}
-		} else if len(s.index["b"]["one:"]) != 1 || s.index["b"]["one:"][0] != expectOne {
-			t.Errorf("Expected b one: index to be v1")
-		}
-		if expectTwo == nil {
-			if s.index["b"]["two:"] != nil {
-				t.Errorf("Expected b two: index to be nil")
-			}
-		} else if len(s.index["b"]["two:"]) != 1 || s.index["b"]["two:"][0] != expectTwo {
-			t.Errorf("Expected b two: index to be v1")
-		}
+
+		notificateText(t, s, "one:", "v1", expectOne)
+		notificateText(t, s, "two:", "v2", expectTwo)
 	}
 
 	s.On(Insert, h)
@@ -568,7 +557,7 @@ func TestUnique(t *testing.T) {
 }
 
 func TestUnsure(t *testing.T) {
-	if Unsure("A", "Z") != true {
+	if !Unsure("A", "Z") {
 		t.Errorf("Expected A to be < Z")
 	}
 }

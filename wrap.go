@@ -4,50 +4,22 @@ import (
 	"github.com/google/btree"
 
 	"fmt"
-	"math"
-	"math/rand"
-	"time"
 )
 
 type wrap struct {
-	id      string
+	uid     UID
 	indexer Indexer
 	values  []string
 }
 
-// ID generates a unique ID for a wrap instance
-func (w *wrap) ID() string {
-	if w.id == "" {
-		safeChars := "23456789ABCDEFGHJKLMNPQRSTWXYZabcdefghijkmnopqrstuvwxyz"
+// UID generates a unique UID for a wrap instance
+func (w *wrap) UID() UID {
+	if w.uid == "" {
 
-		var (
-			now   = float64(time.Now().UnixNano())
-			n     = len(safeChars)
-			scale = float64(n)
-			week  = float64(86400000000000 * 7)
-			weeks = math.Floor(now / week)
-			ofs   = now - weeks*week
-			id    = make([]byte, 12)
-		)
-
-		id[0] = safeChars[int64(weeks/scale)%int64(scale)]
-		id[1] = safeChars[int64(weeks)%int64(scale)]
-
-		for i := 2; i < 7; i++ {
-			r := math.Floor(ofs / week * scale)
-			ofs -= r * week / scale
-			scale *= float64(n)
-			id[i] = safeChars[int64(r)]
-		}
-
-		for i := 7; i < 12; i++ {
-			id[i] = safeChars[rand.Int31n(int32(n))]
-		}
-
-		w.id = string(id)
+		w.uid = NewUID()
 	}
 
-	return w.id
+	return w.uid
 }
 
 func (w *wrap) Less(than btree.Item) bool {

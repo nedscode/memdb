@@ -170,7 +170,7 @@ func (s *Store) Persistent(persister persist.Persister) error {
 	err := persister.Load(func(id string, indexer interface{}) {
 		if idx, ok := indexer.(Indexer); ok {
 			w := s.wrapIt(idx)
-			w.id = id
+			w.uid = UID(id)
 			s.addWrap(w)
 		} else {
 			loaderErr = fmt.Errorf("Error converting item %T to Indexer", indexer)
@@ -280,56 +280,47 @@ func (idx *Index) find(keys []string) []Indexer {
 	return values
 }
 
-// Ascend calls provided callback function from start (lowest order) of items until end or iterator function returns false
-func (s *Store) Ascend(cb Iterator) {
-	s.RLock()
-	defer s.RUnlock()
-
-	s.backing.Ascend(func(i btree.Item) bool {
+func cbWrap(cb Iterator) btree.ItemIterator {
+	return func(i btree.Item) bool {
 		if w, ok := i.(*wrap); ok {
 			return cb(w.indexer)
 		}
 		return true
-	})
+	}
+}
+
+func traverse(traverse func(btree.Item, btree.Item, btree.ItemIterator), a, b btree.Item, iterator btree.ItemIterator) {
+	traverse(a, b, iterator)
+}
+
+// Ascend calls provided callback function from start (lowest order) of items until end or iterator function returns
+// false
+func (s *Store) Ascend(cb Iterator) {
+	s.RLock()
+	defer s.RUnlock()
+	traverse(s.backing.AscendRange, nil, nil, cbWrap(cb))
 }
 
 // AscendStarting calls provided callback function from item equal to at until end or iterator function returns false
 func (s *Store) AscendStarting(at Indexer, cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-
-	s.backing.AscendGreaterOrEqual(&wrap{indexer: at}, func(item btree.Item) bool {
-		if w, ok := item.(*wrap); ok {
-			return cb(w.indexer)
-		}
-		return true
-	})
+	traverse(s.backing.AscendRange, &wrap{indexer: at}, nil, cbWrap(cb))
 }
 
-// Descend calls provided callback function from end (highest order) of items until start or iterator function returns false
+// Descend calls provided callback function from end (highest order) of items until start or iterator function returns
+// false
 func (s *Store) Descend(cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-
-	s.backing.Descend(func(i btree.Item) bool {
-		if w, ok := i.(*wrap); ok {
-			return cb(w.indexer)
-		}
-		return true
-	})
+	traverse(s.backing.DescendRange, nil, nil, cbWrap(cb))
 }
 
 // DescendStarting calls provided callback function from item equal to at until start or iterator function returns false
 func (s *Store) DescendStarting(at Indexer, cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-
-	s.backing.DescendLessOrEqual(&wrap{indexer: at}, func(item btree.Item) bool {
-		if w, ok := item.(*wrap); ok {
-			return cb(w.indexer)
-		}
-		return true
-	})
+	traverse(s.backing.DescendRange, &wrap{indexer: at}, nil, cbWrap(cb))
 }
 
 func (s *Store) findExpired() []Indexer {
@@ -484,7 +475,7 @@ func (s *Store) emit(event Event, old, new Indexer) {
 		return
 	}
 
-	if handlers != nil && len(handlers) > 0 {
+	if len(handlers) > 0 {
 		for _, handler := range handlers {
 			handler(event, old, new)
 		}
@@ -497,7 +488,7 @@ func (s *Store) add(indexer Indexer) (Indexer, error) {
 
 	var err error
 	if s.persister != nil {
-		err = s.persister.Save(w.ID(), indexer)
+		err = s.persister.Save(string(w.UID()), indexer)
 	}
 
 	return ret, err
@@ -574,7 +565,7 @@ func (s *Store) rm(indexer Indexer) (Indexer, error) {
 	if removed != nil {
 		w := removed.(*wrap)
 		if s.persister != nil {
-			err = s.persister.Remove(w.ID())
+			err = s.persister.Remove(string(w.UID()))
 		}
 
 		for _, index := range s.indexes {

@@ -77,7 +77,7 @@ func TestStorage(t *testing.T) {
 
 	s.Load(func(idIn string, indexer interface{}) {
 		if idIn != id {
-			t.Errorf("Didn't get expected ID on load %s (expected %s)", idIn, id)
+			t.Errorf("Didn't get expected UID on load %s (expected %s)", idIn, id)
 		}
 
 		if x, ok := indexer.(*X); !ok {
