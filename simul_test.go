@@ -225,7 +225,7 @@ func simulateLookupHandler(mdb *Store) {
 func simulateEachHandler(mdb *Store) {
 	s := getRand(3)
 
-	ea := func(_ Indexer) bool {
+	ea := func(_ interface{}) bool {
 		time.Sleep(time.Duration(getRand(1000)) * time.Microsecond)
 		return getRand(100) < 98
 	}
@@ -247,7 +247,7 @@ func simulateWalkHandler(mdb *Store) {
 	s := getRand(4)
 	a := getRand(aEls)
 
-	ea := func(_ Indexer) bool {
+	ea := func(_ interface{}) bool {
 		time.Sleep(time.Duration(getRand(200)) * time.Microsecond)
 		return getRand(100) < 98
 	}

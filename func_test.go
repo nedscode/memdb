@@ -24,20 +24,20 @@ type X struct {
 // Storage is a mock memdb Persister that stores and loads from a map for testing purposes.
 type Storage struct {
 	sync.Mutex
-	Store map[string]Indexer
+	Store map[string]interface{}
 }
 
 func NewMockStorage() *Storage {
 	return &Storage{
-		Store: map[string]Indexer{},
+		Store: map[string]interface{}{},
 	}
 }
 
 // Save is an implementation of the Persister.Save method
-func (s *Storage) Save(id string, indexer interface{}) error {
+func (s *Storage) Save(id string, item interface{}) error {
 	s.Lock()
 	defer s.Unlock()
-	s.Store[id] = indexer.(Indexer)
+	s.Store[id] = item
 	return nil
 }
 
@@ -45,8 +45,8 @@ func (s *Storage) Save(id string, indexer interface{}) error {
 func (s *Storage) Load(loadFunc persist.LoadFunc) error {
 	s.Lock()
 	defer s.Unlock()
-	for id, indexer := range s.Store {
-		loadFunc(id, indexer)
+	for id, item := range s.Store {
+		loadFunc(id, item)
 	}
 	return nil
 }
@@ -70,12 +70,12 @@ func init() {
 	flag.Parse()
 }
 
-func (x *X) Less(o Indexer) bool {
+func (x *X) Less(o interface{}) bool {
 	return x.a < o.(*X).a
 }
-func (x *X) IsExpired() bool {
+func (x *X) IsExpired(now, fetched, updated time.Time) bool {
 	if expired < 0 {
-		return time.Now().UnixNano()%1000000 > 995000
+		return now.UnixNano()%1000000 > 995000
 	}
 	return x.a == expired
 }
@@ -215,7 +215,7 @@ func TestTraverse(t *testing.T) {
 	var got, expect string
 	var stop *X
 
-	iter := func(i Indexer) bool {
+	iter := func(i interface{}) bool {
 		got += i.(*X).b
 		return i != stop
 	}
@@ -297,8 +297,8 @@ func verifyPersistentStore(p *Storage, t *testing.T) {
 
 func performTraversals(
 	t *testing.T,
-	s *Store,
-	iter func(i Indexer) bool,
+	s Storer,
+	iter func(i interface{}) bool,
 	got *string,
 	stop **X,
 	v2 *X,
@@ -384,7 +384,7 @@ func TestEach(t *testing.T) {
 	s.Put(v8)
 
 	total := 0
-	s.In("c").Each(func(i Indexer) bool {
+	s.In("c").Each(func(i interface{}) bool {
 		total += i.(*X).a
 		return true
 	}, "ZZZ")
@@ -398,12 +398,13 @@ func upTo(ms int) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), time.Duration(ms)*time.Millisecond)
 }
 
-func notificateText(t *testing.T, s *Store, text, what string, expect Indexer) {
+func notificateText(t *testing.T, s Storer, text, what string, expect Indexable) {
+	st := s.(*Store)
 	if expect == nil {
-		if s.index["b"][text] != nil {
+		if st.index["b"][text] != nil {
 			t.Errorf("Expected b one: index to be nil")
 		}
-	} else if len(s.index["b"][text]) != 1 || s.index["b"][text][0] != expect {
+	} else if len(st.index["b"][text]) != 1 || st.index["b"][text][0] != expect {
 		t.Errorf("Expected b %s: index to be %s", text, what)
 	}
 }
@@ -415,12 +416,12 @@ func TestNotificates(t *testing.T) {
 	v2 := &X{a: 1, b: "two:"}
 
 	var expectEvent Event
-	var expectOld, expectNew, expectOne, expectTwo Indexer
+	var expectOld, expectNew, expectOne, expectTwo Indexable
 
 	var ctx context.Context
 	var done context.CancelFunc
 
-	h := func(event Event, old, new Indexer) {
+	h := func(event Event, old, new interface{}) {
 		defer done()
 
 		if event != expectEvent {
@@ -522,11 +523,11 @@ func TestUnique(t *testing.T) {
 	v2 := &X{a: 3, b: "three", c: "b"}
 	v3 := &X{a: 4, b: "four", c: "c"}
 
-	var updated Indexer
+	var updated interface{}
 	var ctx context.Context
 	var done context.CancelFunc
 
-	s.On(Update, func(_ Event, old, new Indexer) {
+	s.On(Update, func(_ Event, old, new interface{}) {
 		defer done()
 		updated = old
 	})
@@ -563,7 +564,8 @@ func TestUnsure(t *testing.T) {
 }
 
 func TestLess(t *testing.T) {
-	v1 := &wrap{indexer: &X{a: 1, b: "one:"}}
+	s := NewStore()
+	v1 := &wrap{storer: s, item: &X{a: 1, b: "one:"}}
 	vx := btree.Int(5)
 
 	if v1.Less(vx) {
@@ -621,4 +623,56 @@ func TestPersistentAfterUse(t *testing.T) {
 	p := NewMockStorage()
 	s.Put(&X{})
 	s.Persistent(p)
+}
+
+type anon struct {
+	id    string
+	value int
+}
+
+func TestPrimaryKey(t *testing.T) {
+	s := NewStore()
+	s.PrimaryKey("id")
+	s.CreateIndex("value")
+
+	s.Put(&anon{"c", 10})
+	s.Put(&anon{"b", 20})
+	s.Put(&anon{"a", 40})
+	s.Put(&anon{"d", 80})
+
+	order := ""
+	s.Ascend(func(i interface{}) bool {
+		order += i.(*anon).id
+		return true
+	})
+
+	if order != "abcd" {
+		t.Errorf("Wrong order of items, expected abcd (got %s)", order)
+	}
+}
+
+func TestReversed(t *testing.T) {
+	s := NewStore()
+	s.PrimaryKey("id")
+	s.CreateIndex("value")
+	s.Reversed()
+
+	if !s.(*Store).reversed {
+		t.Errorf("Expected store.reversed to be true")
+	}
+
+	s.Put(&anon{"b", 10})
+	s.Put(&anon{"d", 20})
+	s.Put(&anon{"a", 40})
+	s.Put(&anon{"c", 80})
+
+	order := ""
+	s.Ascend(func(i interface{}) bool {
+		order += i.(*anon).id
+		return true
+	})
+
+	if order != "dcba" {
+		t.Errorf("Wrong order of items, expected dcba (got %s)", order)
+	}
 }

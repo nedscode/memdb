@@ -1,10 +1,9 @@
 package filepersist
 
 import (
-	"github.com/nedscode/memdb"
-
 	"os"
 	"testing"
+	"time"
 )
 
 type X struct {
@@ -14,11 +13,11 @@ type X struct {
 	X bool   `json:"x"`
 }
 
-func (x *X) Less(o memdb.Indexer) bool {
+func (x *X) Less(o interface{}) bool {
 	return x.A < o.(*X).A
 }
 
-func (x *X) IsExpired() bool {
+func (x *X) IsExpired(now, fetched, updated time.Time) bool {
 	return x.X
 }
 
@@ -33,11 +32,11 @@ type Y struct {
 	Bad chan int `json:"Bad"`
 }
 
-func (y *Y) Less(o memdb.Indexer) bool {
+func (y *Y) Less(o interface{}) bool {
 	return false
 }
 
-func (y *Y) IsExpired() bool {
+func (y *Y) IsExpired(now, fetched, updated time.Time) bool {
 	return false
 }
 

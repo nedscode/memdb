@@ -4,6 +4,7 @@ import (
 	"github.com/nedscode/memdb"
 
 	"fmt"
+	"time"
 )
 
 type car struct {
@@ -13,7 +14,7 @@ type car struct {
 	Expired bool
 }
 
-func (i *car) Less(other memdb.Indexer) bool {
+func (i *car) Less(other interface{}) bool {
 	switch o := other.(type) {
 	case *car:
 		if i.Make < o.Make {
@@ -30,7 +31,7 @@ func (i *car) Less(other memdb.Indexer) bool {
 	return memdb.Unsure(i, other)
 }
 
-func (i *car) IsExpired() bool {
+func (i *car) IsExpired(now, fetched, updated time.Time) bool {
 	return i.Expired
 }
 
@@ -93,7 +94,7 @@ func main() {
 	}
 
 	fmt.Println("Iterating over cars > Nissan:")
-	mdb.AscendStarting(&car{Make: "Nissan"}, func(indexer memdb.Indexer) bool {
+	mdb.AscendStarting(&car{Make: "Nissan"}, func(indexer interface{}) bool {
 		c, _ := indexer.(*car)
 		if c.Make == "Suzuki" {
 			// Not interested any more

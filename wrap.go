@@ -4,18 +4,23 @@ import (
 	"github.com/google/btree"
 
 	"fmt"
+	"time"
 )
 
 type wrap struct {
+	storer  Storer
 	uid     UID
-	indexer Indexer
+	item    interface{}
 	values  []string
+	fetched time.Time
+	updated time.Time
+	reads   uint64
+	writes  uint64
 }
 
 // UID generates a unique UID for a wrap instance
 func (w *wrap) UID() UID {
 	if w.uid == "" {
-
 		w.uid = NewUID()
 	}
 
@@ -23,9 +28,9 @@ func (w *wrap) UID() UID {
 }
 
 func (w *wrap) Less(than btree.Item) bool {
-	a := w.indexer
+	a := w.item
 	if wb, ok := than.(*wrap); ok {
-		return a.Less(wb.indexer)
+		return w.storer.Less(a, wb.item)
 	}
 	return false
 }
