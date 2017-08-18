@@ -5,76 +5,12 @@ import (
 	"github.com/google/btree"
 	"github.com/nedscode/memdb/persist"
 
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 )
-
-// Indexer can be passed to a Storer's SetIndexer. It is a Comparator, Expirer and Fielder
-type Indexer interface {
-	Comparator
-	Expirer
-	Fielder
-}
-
-// Comparator can perform a Less comparison of 2 items
-type Comparator interface {
-	Less(a interface{}, b interface{}) bool
-}
-
-// Expirer can determine if an item is expired given a current time, last fetched
-// and last updated time
-type Expirer interface {
-	IsExpired(a interface{}, now, fetched, updated time.Time) bool
-}
-
-// Fielder can get the string value for a given item's named field
-type Fielder interface {
-	GetField(a interface{}, field string) string
-}
-
-// Storer provides the functionality of a memdb store.
-type Storer interface {
-	Indexer
-	SetIndexer(indexer Indexer)
-	SetComparator(comparator Comparator)
-	SetExpirer(expirer Expirer)
-	SetFielder(fielder Fielder)
-
-	PrimaryKey(fields ...string) *Store
-	CreateIndex(fields ...string) *Store
-	Unique() *Store
-	Reversed(order ...bool) *Store
-
-	Persistent(persister persist.Persister) error
-
-	Get(search interface{}) interface{}
-	Put(indexer interface{}) (interface{}, error)
-	Delete(search interface{}) (interface{}, error)
-
-	In(fields ...string) IndexSearcher
-	Ascend(cb Iterator)
-	AscendStarting(at interface{}, cb Iterator)
-	Descend(cb Iterator)
-	DescendStarting(at interface{}, cb Iterator)
-
-	Expire() int
-
-	Len() int
-	Indexes() [][]string
-	Keys(fields ...string) []string
-
-	On(event Event, notify NotifyFunc)
-}
-
-// IndexSearcher can return results from an index
-type IndexSearcher interface {
-	Each(cb Iterator, keys ...string)
-	One(keys ...string) interface{}
-	Lookup(keys ...string) []interface{}
-	_id() string
-}
 
 // Store implements Storer, indexed storage for various items
 //
@@ -85,12 +21,13 @@ type IndexSearcher interface {
 // comparator) without first removing the existing item. Such an act would leave the item stranded in an unknown
 // location within the index.
 type Store struct {
+	Storer
 	sync.RWMutex
 
 	backing *btree.BTree
 	indexes map[string]*Index
 	cIndex  *Index
-	index   map[string]map[string][]interface{}
+	index   map[string]map[string][]*wrap
 	happens chan *happening
 	used    bool
 
@@ -108,74 +45,6 @@ type Store struct {
 	expiryNotifiers []NotifyFunc
 }
 
-type happening struct {
-	event Event
-	old   interface{}
-	new   interface{}
-}
-
-// Index represent a list of indexes
-type Index struct {
-	n      int
-	id     string
-	fields []string
-	store  *Store
-	unique bool
-}
-
-// Event is a type of event emitted by the class, see the On() method
-type Event int
-
-// String describes the event type
-func (e Event) String() string {
-	switch e {
-	case Insert:
-		return "Insert event"
-	case Update:
-		return "Update event"
-	case Remove:
-		return "Remove event"
-	case Expiry:
-		return "Expiry event"
-	default:
-		break
-	}
-	return "Unknown event"
-}
-
-const (
-	// Insert Events happen when an item is inserted for the first time
-	Insert Event = iota
-
-	// Update Events happen when an existing item is replaced with an new item
-	Update
-
-	// Remove Events happen when an existing item is deleted
-	Remove
-
-	// Expiry Events happen when items are removed due to being expired
-	Expiry
-)
-
-type noIndexer struct{}
-
-func (x *noIndexer) Less(_ interface{}) bool {
-	return true
-}
-func (x *noIndexer) IsExpired() bool {
-	return false
-}
-func (x *noIndexer) GetField(_ string) string {
-	return ""
-}
-
-var (
-	none = &noIndexer{}
-)
-
-// NotifyFunc is an event receiver that gets called when events happen
-type NotifyFunc func(event Event, old, new interface{})
-
 // NewStore returns an initialized store for you to use
 func NewStore() Storer {
 	s := &Store{}
@@ -192,7 +61,7 @@ func (s *Store) Init() {
 	happens := make(chan *happening, 100000)
 
 	s.backing = btree.New(2)
-	s.index = map[string]map[string][]interface{}{}
+	s.index = map[string]map[string][]*wrap{}
 	s.indexes = map[string]*Index{}
 	s.happens = happens
 
@@ -355,13 +224,13 @@ func (s *Store) Persistent(persister persist.Persister) error {
 	defer s.Unlock()
 
 	var loaderErr error
-	err := persister.Load(func(id string, indexer interface{}) {
-		if idx, ok := indexer.(Indexable); ok {
+	err := persister.Load(func(id string, item interface{}) {
+		if idx, ok := item.(Indexable); ok {
 			w := s.wrapIt(idx)
 			w.uid = UID(id)
 			s.addWrap(w)
 		} else {
-			loaderErr = fmt.Errorf("Error converting item %T to Indexer", indexer)
+			loaderErr = fmt.Errorf("Error converting item %T to Indexer", item)
 		}
 	})
 
@@ -408,107 +277,12 @@ func (s *Store) In(fields ...string) IndexSearcher {
 	return idx
 }
 
-// Each calls iterator for every matched element
-// Items are not guaranteed to be in any particular order
-func (idx *Index) Each(cb Iterator, keys ...string) {
-	if idx == nil {
-		return
-	}
-
-	idx.store.RLock()
-	defer idx.store.RUnlock()
-
-	values := idx.find(keys)
-	if values == nil {
-		return
-	}
-	for _, indexer := range values {
-		if !cb(indexer) {
-			return
-		}
-	}
-}
-
-// One is like Lookup, except just returns the first item found
-func (idx *Index) One(keys ...string) interface{} {
-	if idx == nil {
-		return nil
-	}
-
-	idx.store.RLock()
-	defer idx.store.RUnlock()
-
-	values := idx.find(keys)
-	if len(values) > 0 {
-		return values[0]
-	}
-	return nil
-}
-
-// Lookup returns the list of items from the index that match given key
-// Returned items are not guaranteed to be in any particular order
-func (idx *Index) Lookup(keys ...string) []interface{} {
-	if idx == nil {
-		return nil
-	}
-
-	idx.store.RLock()
-	defer idx.store.RUnlock()
-
-	values := idx.find(keys)
-	if values == nil {
-		return nil
-	}
-	c := make([]interface{}, len(values))
-	copy(c, values)
-	return c
-}
-
-func (idx *Index) _id() string {
-	if idx == nil {
-		return ""
-	}
-
-	return idx.id
-}
-
-func (idx *Index) find(keys []string) []interface{} {
-	if idx == nil {
-		return nil
-	}
-
-	if len(keys) != len(idx.fields) {
-		return nil
-	}
-
-	s := idx.store
-
-	index, ok := s.index[idx.id]
-	if !ok {
-		return nil
-	}
-
-	key := strings.Join(keys, "\000")
-
-	values, ok := index[key]
-	if !ok {
-		return nil
-	}
-
-	return values
-}
-
-func cbWrap(cb Iterator) btree.ItemIterator {
-	return func(i btree.Item) bool {
-		if w, ok := i.(*wrap); ok {
-			return cb(w.item)
-		}
-		return true
-	}
-}
-
-func traverse(traverse func(btree.Item, btree.Item, btree.ItemIterator), a, b btree.Item, iterator btree.ItemIterator) {
-	traverse(a, b, iterator)
+// Info calls provided callback function from start (lowest order) of items until end or iterator function returns
+// false, includes statistical information for all items in callback.
+func (s *Store) Info(cb InfoIterator) {
+	s.RLock()
+	defer s.RUnlock()
+	traverse(s.backing.AscendRange, nil, nil, cbWrap(cb))
 }
 
 // Ascend calls provided callback function from start (lowest order) of items until end or iterator function returns
@@ -541,24 +315,6 @@ func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 	traverse(s.backing.DescendRange, &wrap{storer: s, item: at}, nil, cbWrap(cb))
 }
 
-func (s *Store) findExpired() []interface{} {
-	s.RLock()
-	defer s.RUnlock()
-	now := time.Now()
-
-	var rm []interface{}
-	s.backing.Ascend(func(item btree.Item) bool {
-		if w, ok := item.(*wrap); ok {
-			if s.IsExpired(w.item, now, w.fetched, w.updated) {
-				rm = append(rm, w.item)
-			}
-		}
-		return true
-	})
-
-	return rm
-}
-
 // Expire finds all expiring items in the store and deletes them
 func (s *Store) Expire() int {
 	rm := s.findExpired()
@@ -566,12 +322,12 @@ func (s *Store) Expire() int {
 	s.Lock()
 	defer s.Unlock()
 
-	for _, v := range rm {
-		old, _ := s.rm(v)
+	for _, wrapped := range rm {
+		old, _ := s.rm(wrapped)
 		if old != nil {
 			s.happens <- &happening{
 				event: Expiry,
-				old:   old,
+				old:   old.item,
 			}
 		}
 	}
@@ -579,23 +335,56 @@ func (s *Store) Expire() int {
 	return len(rm)
 }
 
-// Put places an indexer item into the store
-func (s *Store) Put(indexer interface{}) (interface{}, error) {
+// PutAll places multiple items into the store on a single lock
+func (s *Store) PutAll(items []interface{}) error {
 	s.Lock()
 	defer s.Unlock()
 
-	old, err := s.add(indexer)
+	errs := 0
+	for _, item := range items {
+		old, err := s.add(item)
+
+		if old == nil {
+			s.happens <- &happening{
+				event: Insert,
+				new:   item,
+			}
+		} else if old != none {
+			s.happens <- &happening{
+				event: Update,
+				old:   old.item,
+				new:   item,
+			}
+		}
+
+		if err != nil {
+			errs++
+		}
+	}
+
+	if errs > 0 {
+		return errors.New(fmt.Sprintf("%d errors occurred during operation", errs))
+	}
+	return nil
+}
+
+// Put places an item into the store
+func (s *Store) Put(item interface{}) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	old, err := s.add(item)
 
 	if old == nil {
 		s.happens <- &happening{
 			event: Insert,
-			new:   indexer,
+			new:   item,
 		}
 	} else if old != none {
 		s.happens <- &happening{
 			event: Update,
-			old:   old,
-			new:   indexer,
+			old:   old.item,
+			new:   item,
 		}
 	}
 
@@ -611,7 +400,7 @@ func (s *Store) Delete(search interface{}) (interface{}, error) {
 	if old != nil {
 		s.happens <- &happening{
 			event: Remove,
-			old:   old,
+			old:   old.item,
 		}
 	}
 	return old, err
@@ -679,6 +468,24 @@ func (s *Store) On(event Event, notify NotifyFunc) {
 	}
 }
 
+func (s *Store) findExpired() []*wrap {
+	s.RLock()
+	defer s.RUnlock()
+	now := time.Now()
+
+	var rm []*wrap
+	s.backing.Ascend(func(item btree.Item) bool {
+		if w, ok := item.(*wrap); ok {
+			if s.IsExpired(w.item, now, w.fetched, w.updated) {
+				rm = append(rm, w)
+			}
+		}
+		return true
+	})
+
+	return rm
+}
+
 func (s *Store) emit(event Event, old, new interface{}) {
 	var handlers []NotifyFunc
 	switch event {
@@ -701,19 +508,19 @@ func (s *Store) emit(event Event, old, new interface{}) {
 	}
 }
 
-func (s *Store) add(indexer interface{}) (interface{}, error) {
-	w := s.wrapIt(indexer)
+func (s *Store) add(item interface{}) (*wrap, error) {
+	w := s.wrapIt(item)
 	ret := s.addWrap(w)
 
 	var err error
 	if s.persister != nil {
-		err = s.persister.Save(string(w.UID()), indexer)
+		err = s.persister.Save(string(w.UID()), item)
 	}
 
 	return ret, err
 }
 
-func (s *Store) addWrap(w *wrap) interface{} {
+func (s *Store) addWrap(w *wrap) *wrap {
 	s.used = true
 	found := s.backing.ReplaceOrInsert(w)
 
@@ -722,6 +529,7 @@ func (s *Store) addWrap(w *wrap) interface{} {
 		ow = found.(*wrap)
 		w.fetched = ow.fetched
 		w.writes = ow.writes
+		w.reads = ow.reads
 	}
 	w.updated = time.Now()
 	w.writes++
@@ -732,16 +540,16 @@ func (s *Store) addWrap(w *wrap) interface{} {
 		if ow != nil {
 			oldKey := ow.values[index.n]
 			if oldKey != key {
-				s.rmFromIndex(index.id, oldKey, ow.item)
-				emitted = s.addToIndex(index.id, key, w.item)
+				s.rmFromIndex(index.id, oldKey, ow)
+				emitted = s.addToIndex(index.id, key, w)
 			}
 		} else {
-			emitted = s.addToIndex(index.id, key, w.item)
+			emitted = s.addToIndex(index.id, key, w)
 		}
 	}
 
 	if ow != nil {
-		return ow.item
+		return ow
 	}
 	if emitted {
 		return none
@@ -749,7 +557,7 @@ func (s *Store) addWrap(w *wrap) interface{} {
 	return nil
 }
 
-func (s *Store) addToIndex(indexID string, key string, indexer interface{}) (emitted bool) {
+func (s *Store) addToIndex(indexID string, key string, wrapped *wrap) (emitted bool) {
 	index, ok := s.indexes[indexID]
 	if !ok {
 		return
@@ -757,32 +565,39 @@ func (s *Store) addToIndex(indexID string, key string, indexer interface{}) (emi
 
 	indexItems, ok := s.index[indexID]
 	if !ok {
-		indexItems = map[string][]interface{}{}
+		indexItems = map[string][]*wrap{}
 		s.index[indexID] = indexItems
 	}
 
 	items := indexItems[key]
 	if index.unique && len(items) > 0 {
 		// Items have been replaced!
-		for _, item := range indexItems[key] {
-			rm, _ := s.rm(item)
+		for _, indexItem := range indexItems[key] {
+			rm, _ := s.rm(indexItem)
 			if rm != nil {
 				s.happens <- &happening{
 					event: Update,
-					old:   rm,
-					new:   indexer,
+					old:   rm.item,
+					new:   wrapped.item,
 				}
 				emitted = true
 			}
 		}
 		items = nil
 	}
-	indexItems[key] = append(items, indexer)
+	indexItems[key] = append(items, wrapped)
 	return
 }
 
-func (s *Store) rm(item interface{}) (interface{}, error) {
-	removed := s.backing.Delete(&wrap{storer: s, item: item})
+func (s *Store) rm(item interface{}) (*wrap, error) {
+	var search *wrap
+
+	if wrapped, ok := item.(*wrap); ok {
+		search = wrapped
+	} else {
+		search = &wrap{storer: s, item: item}
+	}
+	removed := s.backing.Delete(search)
 
 	var err error
 	if removed != nil {
@@ -793,17 +608,17 @@ func (s *Store) rm(item interface{}) (interface{}, error) {
 
 		for _, index := range s.indexes {
 			key := w.values[index.n]
-			s.rmFromIndex(index.id, key, w.item)
+			s.rmFromIndex(index.id, key, w)
 		}
 	}
 
 	if removed != nil {
-		return removed.(*wrap).item, err
+		return removed.(*wrap), err
 	}
 	return nil, err
 }
 
-func (s *Store) rmFromIndex(indexID string, key string, item interface{}) {
+func (s *Store) rmFromIndex(indexID string, key string, wrapped *wrap) {
 	index, ok := s.index[indexID]
 	if !ok {
 		return
@@ -815,7 +630,7 @@ func (s *Store) rmFromIndex(indexID string, key string, item interface{}) {
 	}
 
 	for i, value := range values {
-		if item == value {
+		if wrapped == value {
 			n := len(values)
 			if n == 1 && i == 0 {
 				index[key] = nil
@@ -841,6 +656,10 @@ func (s *Store) getFieldsValue(item interface{}, fields []string) string {
 }
 
 func (s *Store) wrapIt(item interface{}) *wrap {
+	if wrapped, ok := item.(*wrap); ok {
+		return wrapped
+	}
+
 	values := make([]string, len(s.indexes))
 	for _, index := range s.indexes {
 		values[index.n] = s.getIndexValue(item, index)
@@ -852,4 +671,24 @@ func (s *Store) wrapIt(item interface{}) *wrap {
 		values:  values,
 		updated: time.Now(),
 	}
+}
+
+func cbWrap(cb interface{}) btree.ItemIterator {
+	now := time.Now()
+	return func(i btree.Item) bool {
+		if w, ok := i.(*wrap); ok {
+			w.fetched = now
+			w.reads++
+			if iterator, ok := cb.(Iterator); ok {
+				return iterator(w.item)
+			} else if info, ok := cb.(InfoIterator); ok {
+				return info(w.uid, w.item, w.fetched, w.updated, w.reads, w.writes)
+			}
+		}
+		return true
+	}
+}
+
+func traverse(traverse func(btree.Item, btree.Item, btree.ItemIterator), a, b btree.Item, iterator btree.ItemIterator) {
+	traverse(a, b, iterator)
 }

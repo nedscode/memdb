@@ -124,6 +124,25 @@ func TestUniqueAfterStore(t *testing.T) {
 	s.Unique()
 }
 
+func TestPutAll(t *testing.T) {
+	s := NewStore()
+	items := []interface{}{
+		&X{a: 1},
+		&X{a: 2},
+		&X{a: 3},
+		&X{a: 4},
+		&X{a: 5},
+		&X{a: 6},
+		&X{a: 1},
+	}
+	s.PutAll(items)
+
+	n := s.Len()
+	if n != 6 {
+		t.Errorf("Expected 6 items imported when PutAll (got %d)", n)
+	}
+}
+
 func TestGet(t *testing.T) {
 	s := NewStore()
 	orig := &X{a: 1}
@@ -151,10 +170,14 @@ func TestLookup(t *testing.T) {
 	}
 	a := vals[0].(*X)
 	b := vals[1].(*X)
-	if (a.a == 1 && b.a == 2) || (a.a == 2 && b.a == 1) {
-		return
+	if (a.a != 1 || b.a != 2) && (a.a != 2 || b.a != 1) {
+		t.Errorf("Expected to return 1 and 2 (got %#v)", vals)
 	}
-	t.Errorf("Expected to return 1 and 2 (got %#v)", vals)
+
+	val := s.In("b").One("test").(*X)
+	if val.a != 1 && val.a != 2 {
+		t.Errorf("Expected One to return 1 or 2 (got %#v)", val)
+	}
 }
 
 func TestLookupInvalidField(t *testing.T) {
@@ -223,6 +246,11 @@ func TestTraverse(t *testing.T) {
 	performTraversals(t, s, iter, &got, &stop, v2, v3, v4)
 
 	expired = 4
+	now := time.Now()
+	if !v4.IsExpired(now, now, now) {
+		t.Errorf("Expected v4 to be expired")
+	}
+
 	s.Expire()
 
 	got = ""
@@ -404,7 +432,7 @@ func notificateText(t *testing.T, s Storer, text, what string, expect Indexable)
 		if st.index["b"][text] != nil {
 			t.Errorf("Expected b one: index to be nil")
 		}
-	} else if len(st.index["b"][text]) != 1 || st.index["b"][text][0] != expect {
+	} else if len(st.index["b"][text]) != 1 || st.index["b"][text][0].item != expect {
 		t.Errorf("Expected b %s: index to be %s", text, what)
 	}
 }
@@ -570,22 +598,6 @@ func TestLess(t *testing.T) {
 
 	if v1.Less(vx) {
 		t.Errorf("Comparison with non-Indexer item should be false")
-	}
-}
-
-func TestNoIndexer(t *testing.T) {
-	n := &noIndexer{}
-
-	if !n.Less(n) {
-		t.Errorf("NoIndexer should be less than everything")
-	}
-
-	if n.IsExpired() {
-		t.Errorf("NoIndexer should never expire")
-	}
-
-	if n.GetField("test") != "" {
-		t.Errorf("NoIndexer should return empty for all fields")
 	}
 }
 
