@@ -5,7 +5,6 @@ import (
 	"github.com/google/btree"
 	"github.com/nedscode/memdb/persist"
 
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -227,7 +226,6 @@ func (s *Store) Persistent(persister persist.Persister) error {
 	err := persister.Load(func(id string, item interface{}) {
 		if idx, ok := item.(Indexable); ok {
 			w := s.wrapIt(idx)
-			w.uid = UID(id)
 			s.addWrap(w)
 		} else {
 			loaderErr = fmt.Errorf("Error converting item %T to Indexer", item)
@@ -363,7 +361,7 @@ func (s *Store) PutAll(items []interface{}) error {
 	}
 
 	if errs > 0 {
-		return errors.New(fmt.Sprintf("%d errors occurred during operation", errs))
+		return fmt.Errorf("%d errors occurred during operation", errs)
 	}
 	return nil
 }
@@ -522,6 +520,7 @@ func (s *Store) add(item interface{}) (*wrap, error) {
 
 func (s *Store) addWrap(w *wrap) *wrap {
 	s.used = true
+	w.UID()
 	found := s.backing.ReplaceOrInsert(w)
 
 	var ow *wrap
@@ -563,17 +562,17 @@ func (s *Store) addToIndex(indexID string, key string, wrapped *wrap) (emitted b
 		return
 	}
 
-	indexItems, ok := s.index[indexID]
+	indexWraps, ok := s.index[indexID]
 	if !ok {
-		indexItems = map[string][]*wrap{}
-		s.index[indexID] = indexItems
+		indexWraps = map[string][]*wrap{}
+		s.index[indexID] = indexWraps
 	}
 
-	items := indexItems[key]
-	if index.unique && len(items) > 0 {
+	wraps := indexWraps[key]
+	if index.unique && len(wraps) > 0 {
 		// Items have been replaced!
-		for _, indexItem := range indexItems[key] {
-			rm, _ := s.rm(indexItem)
+		for _, indexWrap := range indexWraps[key] {
+			rm, _ := s.rm(indexWrap)
 			if rm != nil {
 				s.happens <- &happening{
 					event: Update,
@@ -583,9 +582,9 @@ func (s *Store) addToIndex(indexID string, key string, wrapped *wrap) (emitted b
 				emitted = true
 			}
 		}
-		items = nil
+		wraps = nil
 	}
-	indexItems[key] = append(items, wrapped)
+	indexWraps[key] = append(wraps, wrapped)
 	return
 }
 
@@ -619,25 +618,25 @@ func (s *Store) rm(item interface{}) (*wrap, error) {
 }
 
 func (s *Store) rmFromIndex(indexID string, key string, wrapped *wrap) {
-	index, ok := s.index[indexID]
+	indexWraps, ok := s.index[indexID]
 	if !ok {
 		return
 	}
 
-	values, ok := index[key]
+	wraps, ok := indexWraps[key]
 	if !ok {
 		return
 	}
 
-	for i, value := range values {
-		if wrapped == value {
-			n := len(values)
+	for i, wrap := range wraps {
+		if wrapped == wrap {
+			n := len(wraps)
 			if n == 1 && i == 0 {
-				index[key] = nil
+				indexWraps[key] = nil
 				return
 			}
-			values[i] = values[n-1]
-			index[key] = values[:n-1]
+			wraps[i] = wraps[n-1]
+			indexWraps[key] = wraps[:n-1]
 			return
 		}
 	}

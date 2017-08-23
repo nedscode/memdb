@@ -85,6 +85,32 @@ func (idx *Index) Lookup(keys ...string) []interface{} {
 	return c
 }
 
+// All returns the all items from the index
+func (idx *Index) All() []interface{} {
+	if idx == nil {
+		return nil
+	}
+
+	idx.store.RLock()
+	defer idx.store.RUnlock()
+
+	done := map[string]bool{}
+	items := []interface{}{}
+	if index, ok := idx.store.index[idx.id]; ok {
+		for _, idx := range index {
+			for _, wrap := range idx {
+				uid := wrap.uid.String()
+				if d, ok := done[uid]; !ok || !d {
+					items = append(items, wrap.item)
+					done[uid] = true
+				}
+			}
+		}
+	}
+
+	return items
+}
+
 func (idx *Index) _id() string {
 	if idx == nil {
 		return ""

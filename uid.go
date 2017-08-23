@@ -39,3 +39,7 @@ func NewUID() UID {
 
 	return UID(id)
 }
+
+func (u UID) String() string {
+	return string(u)
+}
