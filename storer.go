@@ -22,6 +22,7 @@ type Storer interface {
 	PutAll(items []interface{}) error
 	Delete(search interface{}) (interface{}, error)
 
+	InPrimaryKey() IndexSearcher
 	In(fields ...string) IndexSearcher
 	Info(cb InfoIterator)
 	Ascend(cb Iterator)

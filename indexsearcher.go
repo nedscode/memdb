@@ -6,5 +6,6 @@ type IndexSearcher interface {
 	One(keys ...string) interface{}
 	Lookup(keys ...string) []interface{}
 	All() []interface{}
+	FieldKey(a interface{}) FieldKey
 	_id() string
 }

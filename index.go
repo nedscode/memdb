@@ -16,6 +16,34 @@ type Index struct {
 	unique bool
 }
 
+// FieldKey represents the key for an item within a field
+type FieldKey []string
+
+// NewFieldKey returns a FieldKey from a field representation string [ FieldKey.String() ]
+func NewFieldKey(from string) FieldKey {
+	return FieldKey(strings.Split(from, "\000"))
+}
+
+// Keys are the keys contained in the FieldKey
+// It can be used like store.In("field").One(fieldKey.Keys()...)
+func (fk FieldKey) Keys() []string {
+	return []string(fk)
+}
+
+// String returns a representation string for the FieldKey [ can supply to NewFieldKey() ]
+func (fk FieldKey) String() string {
+	return strings.Join(fk.Keys(), "\000")
+}
+
+// FieldKey returns the used key value for the given item for this index
+func (idx *Index) FieldKey(a interface{}) FieldKey {
+	components := make([]string, len(idx.fields))
+	for i, field := range idx.fields {
+		components[i] = idx.store.GetField(a, field)
+	}
+	return FieldKey(components)
+}
+
 // Each calls iterator for every matched element
 // Items are not guaranteed to be in any particular order
 func (idx *Index) Each(cb Iterator, keys ...string) {

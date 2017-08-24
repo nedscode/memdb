@@ -159,7 +159,9 @@ func (s *Store) PrimaryKey(fields ...string) *Store {
 	}
 
 	s.primaryKey = fields
-	return s.CreateIndex(fields...)
+	s.CreateIndex(fields...)
+	s.cIndex.unique = true
+	return s
 }
 
 // Reversed flips the meaning of the comparator
@@ -259,6 +261,11 @@ func (s *Store) Get(search interface{}) interface{} {
 	}
 
 	return nil
+}
+
+// InPrimaryKey finds a the primary key index to perform queries upon
+func (s *Store) InPrimaryKey() IndexSearcher {
+	return s.In(s.primaryKey...)
 }
 
 // In finds a simple or compound index to perform queries upon
