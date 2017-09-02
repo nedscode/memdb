@@ -62,8 +62,13 @@ func reflectiveStruct(search string, val reflect.Value, path []string) string {
 
 func reflective(a interface{}, path []string) string {
 	search := ""
-	if len(path) > 0 {
+	n := len(path)
+	if n > 0 {
 		search = strings.ToLower(path[0])
+	}
+
+	if n == 1 && search == "(type)" {
+		return fmt.Sprintf("%T", a)
 	}
 
 	// Use reflection to find a field with the specific name (case insensitive)

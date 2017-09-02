@@ -61,8 +61,8 @@ func (idx *Index) Each(cb Iterator, keys ...string) {
 
 	now := time.Now()
 	for _, wrapped := range values {
-		wrapped.fetched = now
-		wrapped.reads++
+		wrapped.stats.Accessed = now
+		wrapped.stats.Reads++
 		if !cb(wrapped.item) {
 			return
 		}
@@ -81,8 +81,8 @@ func (idx *Index) One(keys ...string) interface{} {
 	values := idx.find(keys)
 	if len(values) > 0 {
 		wrapped := values[0]
-		wrapped.fetched = time.Now()
-		wrapped.reads++
+		wrapped.stats.Accessed = time.Now()
+		wrapped.stats.Reads++
 		return wrapped.item
 	}
 	return nil
@@ -107,8 +107,8 @@ func (idx *Index) Lookup(keys ...string) []interface{} {
 	c := make([]interface{}, len(values))
 	for i, wrapped := range values {
 		c[i] = wrapped.item
-		wrapped.fetched = now
-		wrapped.reads++
+		wrapped.stats.Accessed = now
+		wrapped.stats.Reads++
 	}
 	return c
 }

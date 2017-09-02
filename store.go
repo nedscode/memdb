@@ -101,13 +101,13 @@ func (s *Store) Less(a interface{}, b interface{}) bool {
 }
 
 // IsExpired is an expirer function that checks if an item should be expired out of the store
-func (s *Store) IsExpired(a interface{}, now, fetched, updated time.Time) bool {
+func (s *Store) IsExpired(a interface{}, now time.Time, stats Stats) bool {
 	if s.expirer != nil {
-		return s.expirer.IsExpired(a, now, fetched, updated)
+		return s.expirer.IsExpired(a, now, stats)
 	}
 
 	if ai, ok := a.(Indexable); ok {
-		return ai.IsExpired(now, fetched, updated)
+		return ai.IsExpired(now, stats)
 	}
 
 	// Never expire
@@ -255,8 +255,8 @@ func (s *Store) Get(search interface{}) interface{} {
 	}
 
 	if w, ok := found.(*wrap); ok {
-		w.fetched = time.Now()
-		w.reads++
+		w.stats.Accessed = time.Now()
+		w.stats.Reads++
 		return w.item
 	}
 
@@ -481,7 +481,7 @@ func (s *Store) findExpired() []*wrap {
 	var rm []*wrap
 	s.backing.Ascend(func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
-			if s.IsExpired(w.item, now, w.fetched, w.updated) {
+			if s.IsExpired(w.item, now, w.stats) {
 				rm = append(rm, w)
 			}
 		}
@@ -533,12 +533,10 @@ func (s *Store) addWrap(w *wrap) *wrap {
 	var ow *wrap
 	if found != nil {
 		ow = found.(*wrap)
-		w.fetched = ow.fetched
-		w.writes = ow.writes
-		w.reads = ow.reads
+		w.stats = ow.stats
 	}
-	w.updated = time.Now()
-	w.writes++
+	w.stats.Modified = time.Now()
+	w.stats.Writes++
 
 	var emitted bool
 	for _, index := range s.indexes {
@@ -671,11 +669,15 @@ func (s *Store) wrapIt(item interface{}) *wrap {
 		values[index.n] = s.getIndexValue(item, index)
 	}
 
+	now := time.Now()
 	return &wrap{
-		storer:  s,
-		item:    item,
-		values:  values,
-		updated: time.Now(),
+		storer: s,
+		item:   item,
+		values: values,
+		stats: Stats{
+			Created:  now,
+			Modified: now,
+		},
 	}
 }
 
@@ -683,12 +685,12 @@ func cbWrap(cb interface{}) btree.ItemIterator {
 	now := time.Now()
 	return func(i btree.Item) bool {
 		if w, ok := i.(*wrap); ok {
-			w.fetched = now
-			w.reads++
+			w.stats.Accessed = now
+			w.stats.Reads++
 			if iterator, ok := cb.(Iterator); ok {
 				return iterator(w.item)
 			} else if info, ok := cb.(InfoIterator); ok {
-				return info(w.uid, w.item, w.fetched, w.updated, w.reads, w.writes)
+				return info(w.uid, w.item, w.stats)
 			}
 		}
 		return true

@@ -7,15 +7,20 @@ import (
 	"time"
 )
 
+type Stats struct {
+	Created  time.Time
+	Accessed time.Time
+	Modified time.Time
+	Reads    uint64
+	Writes   uint64
+}
+
 type wrap struct {
-	storer  Storer
-	uid     UID
-	item    interface{}
-	values  []string
-	fetched time.Time
-	updated time.Time
-	reads   uint64
-	writes  uint64
+	storer Storer
+	uid    UID
+	item   interface{}
+	values []string
+	stats  Stats
 }
 
 // UID generates a unique UID for a wrap instance

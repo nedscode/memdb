@@ -14,10 +14,10 @@ type Comparator interface {
 	Less(a interface{}, b interface{}) bool
 }
 
-// Expirer can determine if an item is expired given a current time, last fetched
-// and last updated time
+// Expirer can determine if an item is expired given a current time, last Accessed
+// and last Modified time
 type Expirer interface {
-	IsExpired(a interface{}, now, fetched, updated time.Time) bool
+	IsExpired(a interface{}, now time.Time, stats Stats) bool
 }
 
 // Fielder can get the string value for a given item's named field
