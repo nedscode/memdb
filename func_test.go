@@ -73,7 +73,7 @@ func init() {
 func (x *X) Less(o interface{}) bool {
 	return x.a < o.(*X).a
 }
-func (x *X) IsExpired(now, fetched, updated time.Time) bool {
+func (x *X) IsExpired(now time.Time, stats Stats) bool {
 	if expired < 0 {
 		return now.UnixNano()%1000000 > 995000
 	}
@@ -247,7 +247,7 @@ func TestTraverse(t *testing.T) {
 
 	expired = 4
 	now := time.Now()
-	if !v4.IsExpired(now, now, now) {
+	if !v4.IsExpired(now, Stats{}) {
 		t.Errorf("Expected v4 to be expired")
 	}
 
