@@ -22,7 +22,7 @@ type Storage struct {
 // folder is the directory to store the files in
 // factory is a factory function that can instantiate a new instance of an Indexer
 func NewFileStorage(folder string, factory persist.FactoryFunc) (*Storage, error) {
-	if err := os.Mkdir(folder, 0755); err != nil && os.IsNotExist(err) {
+	if err := os.MkdirAll(folder, 0755); err != nil && os.IsNotExist(err) {
 		return nil, err
 	}
 
