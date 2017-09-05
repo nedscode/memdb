@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"fmt"
 )
 
 var expired = 0
@@ -638,8 +639,8 @@ func TestPersistentAfterUse(t *testing.T) {
 }
 
 type anon struct {
-	id    string
-	value int
+	ID    string
+	Value int
 }
 
 func TestPrimaryKey(t *testing.T) {
@@ -654,7 +655,7 @@ func TestPrimaryKey(t *testing.T) {
 
 	order := ""
 	s.Ascend(func(i interface{}) bool {
-		order += i.(*anon).id
+		order += i.(*anon).ID
 		return true
 	})
 
@@ -680,11 +681,47 @@ func TestReversed(t *testing.T) {
 
 	order := ""
 	s.Ascend(func(i interface{}) bool {
-		order += i.(*anon).id
+		order += i.(*anon).ID
 		return true
 	})
 
 	if order != "dcba" {
 		t.Errorf("Wrong order of items, expected dcba (got %s)", order)
+	}
+}
+
+func TestAnonOverwrite(t *testing.T) {
+	s := NewStore()
+	s.PrimaryKey("id")
+	s.CreateIndex("value")
+
+	s.Put(&anon{"a", 10})
+	s.Put(&anon{"a", 20})
+	s.Put(&anon{"a", 40})
+	s.Put(&anon{"a", 80})
+
+	order := ""
+	s.Ascend(func(i interface{}) bool {
+		order += fmt.Sprintf("%d", i.(*anon).Value)
+		return true
+	})
+
+	if order != "80" {
+		t.Errorf("Wrong order of items, expected 80 (got %s)", order)
+	}
+
+	v := s.In("id").One("a")
+	if v.(*anon).Value != 80 {
+		t.Errorf("Wrong got item, expected 80 (got %d)", v.(*anon).Value)
+	}
+
+	v = s.In("value").One("80")
+	if v.(*anon).Value != 80 {
+		t.Errorf("Wrong got item, expected 80 (got %d)", v.(*anon).Value)
+	}
+
+	v = s.In("value").One("40")
+	if v != nil {
+		t.Errorf("Wrong got item, expected nil (got %d)", v.(*anon).Value)
 	}
 }

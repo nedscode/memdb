@@ -543,13 +543,9 @@ func (s *Store) addWrap(w *wrap) *wrap {
 		key := w.values[index.n]
 		if ow != nil {
 			oldKey := ow.values[index.n]
-			if oldKey != key {
-				s.rmFromIndex(index.id, oldKey, ow)
-				emitted = s.addToIndex(index.id, key, w)
-			}
-		} else {
-			emitted = s.addToIndex(index.id, key, w)
+			s.rmFromIndex(index.id, oldKey, ow)
 		}
+		emitted = s.addToIndex(index.id, key, w)
 	}
 
 	if ow != nil {
