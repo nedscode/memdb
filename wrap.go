@@ -4,15 +4,44 @@ import (
 	"github.com/google/btree"
 
 	"fmt"
+	"sync"
 	"time"
 )
 
 type Stats struct {
+	sync.Mutex
 	Created  time.Time
 	Accessed time.Time
 	Modified time.Time
 	Reads    uint64
 	Writes   uint64
+}
+
+func (s Stats) read(t time.Time) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.Accessed = t
+	s.Reads++
+}
+
+func (s Stats) written(t time.Time) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.Modified = t
+	s.Writes++
+}
+
+func (s Stats) set(from Stats) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.Created = from.Created
+	s.Accessed = from.Accessed
+	s.Modified = from.Modified
+	s.Reads = from.Reads
+	s.Writes = from.Writes
 }
 
 type wrap struct {

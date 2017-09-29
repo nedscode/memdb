@@ -6,12 +6,12 @@ import (
 
 	"context"
 	"flag"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-	"fmt"
 )
 
 var expired = 0

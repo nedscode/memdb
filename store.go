@@ -255,8 +255,7 @@ func (s *Store) Get(search interface{}) interface{} {
 	}
 
 	if w, ok := found.(*wrap); ok {
-		w.stats.Accessed = time.Now()
-		w.stats.Reads++
+		w.stats.read(time.Now())
 		return w.item
 	}
 
@@ -535,8 +534,8 @@ func (s *Store) addWrap(w *wrap) *wrap {
 		ow = found.(*wrap)
 		w.stats = ow.stats
 	}
-	w.stats.Modified = time.Now()
-	w.stats.Writes++
+
+	w.stats.written(time.Now())
 
 	var emitted bool
 	for _, index := range s.indexes {
@@ -681,8 +680,7 @@ func cbWrap(cb interface{}) btree.ItemIterator {
 	now := time.Now()
 	return func(i btree.Item) bool {
 		if w, ok := i.(*wrap); ok {
-			w.stats.Accessed = now
-			w.stats.Reads++
+			w.stats.read(now)
 			if iterator, ok := cb.(Iterator); ok {
 				return iterator(w.item)
 			} else if info, ok := cb.(InfoIterator); ok {
