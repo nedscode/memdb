@@ -1,6 +1,9 @@
 package memdb
 
-import "github.com/nedscode/memdb/persist"
+import (
+	"github.com/nedscode/memdb/persist"
+	"time"
+)
 
 // Storer provides the functionality of a memdb store.
 type Storer interface {
@@ -31,6 +34,7 @@ type Storer interface {
 	DescendStarting(at interface{}, cb Iterator)
 
 	Expire() int
+	ExpireInterval(interval time.Duration)
 
 	Len() int
 	Indexes() [][]string
