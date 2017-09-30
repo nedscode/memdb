@@ -42,6 +42,8 @@ type Store struct {
 	updateNotifiers []NotifyFunc
 	removeNotifiers []NotifyFunc
 	expiryNotifiers []NotifyFunc
+
+	ticker *time.Ticker
 }
 
 // NewStore returns an initialized store for you to use
@@ -67,6 +69,17 @@ func (s *Store) Init() {
 	go func() {
 		for h := range happens {
 			s.emit(h.event, h.old, h.new)
+		}
+	}()
+
+	if s.ticker == nil {
+		s.ticker = time.NewTicker(54 * time.Second)
+	}
+
+	go func() {
+		for {
+			<-s.ticker.C
+			s.Expire()
 		}
 	}()
 }
@@ -319,6 +332,11 @@ func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 	traverse(s.backing.DescendRange, &wrap{storer: s, item: at}, nil, cbWrap(cb))
 }
 
+// ExpireInterval allows setting of a new auto-expire interval (after the current one ticks)
+func (s *Store) ExpireInterval(interval time.Duration) {
+	s.ticker = time.NewTicker(interval)
+}
+
 // Expire finds all expiring items in the store and deletes them
 func (s *Store) Expire() int {
 	rm := s.findExpired()
@@ -480,6 +498,7 @@ func (s *Store) findExpired() []*wrap {
 	var rm []*wrap
 	s.backing.Ascend(func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
+			// TODO - Possible lock contention here if this calls any store functions
 			if s.IsExpired(w.item, now, w.stats) {
 				rm = append(rm, w)
 			}
@@ -665,15 +684,17 @@ func (s *Store) wrapIt(item interface{}) *wrap {
 	}
 
 	now := time.Now()
-	return &wrap{
+	w := &wrap{
 		storer: s,
 		item:   item,
 		values: values,
-		stats: Stats{
-			Created:  now,
-			Modified: now,
-		},
 	}
+	w.stats = Stats{
+		w:        w,
+		Created:  now,
+		Modified: now,
+	}
+	return w
 }
 
 func cbWrap(cb interface{}) btree.ItemIterator {

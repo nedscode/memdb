@@ -8,34 +8,35 @@ import (
 	"time"
 )
 
+// Stats contains the access statistics for a stored item
 type Stats struct {
-	sync.Mutex
 	Created  time.Time
 	Accessed time.Time
 	Modified time.Time
 	Reads    uint64
 	Writes   uint64
+	w        *wrap
 }
 
-func (s Stats) read(t time.Time) {
-	s.Lock()
-	defer s.Unlock()
+func (s *Stats) read(t time.Time) {
+	s.w.Lock()
+	defer s.w.Unlock()
 
 	s.Accessed = t
 	s.Reads++
 }
 
-func (s Stats) written(t time.Time) {
-	s.Lock()
-	defer s.Unlock()
+func (s *Stats) written(t time.Time) {
+	s.w.Lock()
+	defer s.w.Unlock()
 
 	s.Modified = t
 	s.Writes++
 }
 
-func (s Stats) set(from Stats) {
-	s.Lock()
-	defer s.Unlock()
+func (s *Stats) set(from Stats) {
+	s.w.Lock()
+	defer s.w.Unlock()
 
 	s.Created = from.Created
 	s.Accessed = from.Accessed
@@ -45,6 +46,7 @@ func (s Stats) set(from Stats) {
 }
 
 type wrap struct {
+	sync.Mutex
 	storer Storer
 	uid    UID
 	item   interface{}
