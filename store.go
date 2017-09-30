@@ -73,7 +73,8 @@ func (s *Store) Init() {
 	}()
 
 	if s.ticker == nil {
-		s.ticker = time.NewTicker(54 * time.Second)
+		// About 2.6 times per minute, shouldn't hit the same time every minute
+		s.ticker = time.NewTicker(23272 * time.Millisecond)
 	}
 
 	go func() {
