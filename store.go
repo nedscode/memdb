@@ -244,12 +244,8 @@ func (s *Store) Persistent(persister persist.Persister) error {
 
 	var loaderErr error
 	err := persister.Load(func(id string, item interface{}) {
-		if idx, ok := item.(Indexable); ok {
-			w := s.wrapIt(idx)
-			s.addWrap(w)
-		} else {
-			loaderErr = fmt.Errorf("Error converting item %T to Indexer", item)
-		}
+		w := s.wrapIt(item)
+		s.addWrap(w)
 	})
 
 	if err == nil {
