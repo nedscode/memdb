@@ -82,8 +82,7 @@ func (s *Store) Init() {
 			s.ticker = time.NewTicker(23272 * time.Millisecond)
 		}
 
-		for {
-			<-s.ticker.C
+		for range s.ticker.C {
 			s.Expire()
 		}
 	}()
@@ -245,6 +244,7 @@ func (s *Store) Persistent(persister persist.Persister) error {
 	var loaderErr error
 	err := persister.Load(func(id string, item interface{}) {
 		w := s.wrapIt(item)
+		w.uid = UID(id)
 		s.addWrap(w)
 	})
 
