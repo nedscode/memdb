@@ -450,7 +450,7 @@ func TestNotificates(t *testing.T) {
 	var ctx context.Context
 	var done context.CancelFunc
 
-	h := func(event Event, old, new interface{}) {
+	h := func(event Event, old, new interface{}, stats Stats) {
 		defer done()
 
 		if event != expectEvent {
@@ -556,7 +556,7 @@ func TestUnique(t *testing.T) {
 	var ctx context.Context
 	var done context.CancelFunc
 
-	s.On(Update, func(_ Event, old, new interface{}) {
+	s.On(Update, func(_ Event, old, new interface{}, stats Stats) {
 		defer done()
 		updated = old
 	})

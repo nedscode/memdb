@@ -42,6 +42,7 @@ type Store struct {
 	updateNotifiers []NotifyFunc
 	removeNotifiers []NotifyFunc
 	expiryNotifiers []NotifyFunc
+	accessNotifiers []NotifyFunc
 
 	ticker *time.Ticker
 }
@@ -68,7 +69,7 @@ func (s *Store) Init() {
 
 	go func() {
 		for h := range happens {
-			s.emit(h.event, h.old, h.new)
+			s.emit(h.event, h.old, h.new, h.stats)
 		}
 	}()
 
@@ -270,6 +271,13 @@ func (s *Store) Get(search interface{}) interface{} {
 
 	if w, ok := found.(*wrap); ok {
 		w.stats.read(time.Now())
+		s.happens <- &happening{
+			event: Access,
+			old:   w.item,
+			new:   w.item,
+			stats: w.stats,
+		}
+
 		return w.item
 	}
 
@@ -300,7 +308,7 @@ func (s *Store) In(fields ...string) IndexSearcher {
 func (s *Store) Info(cb InfoIterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.AscendRange, nil, nil, cbWrap(cb))
+	traverse(s.backing.AscendRange, nil, nil, s.cbWrap(cb))
 }
 
 // Ascend calls provided callback function from start (lowest order) of items until end or iterator function returns
@@ -308,14 +316,14 @@ func (s *Store) Info(cb InfoIterator) {
 func (s *Store) Ascend(cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.AscendRange, nil, nil, cbWrap(cb))
+	traverse(s.backing.AscendRange, nil, nil, s.cbWrap(cb))
 }
 
 // AscendStarting calls provided callback function from item equal to at until end or iterator function returns false
 func (s *Store) AscendStarting(at interface{}, cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.AscendRange, &wrap{storer: s, item: at}, nil, cbWrap(cb))
+	traverse(s.backing.AscendRange, &wrap{storer: s, item: at}, nil, s.cbWrap(cb))
 }
 
 // Descend calls provided callback function from end (highest order) of items until start or iterator function returns
@@ -323,14 +331,14 @@ func (s *Store) AscendStarting(at interface{}, cb Iterator) {
 func (s *Store) Descend(cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.DescendRange, nil, nil, cbWrap(cb))
+	traverse(s.backing.DescendRange, nil, nil, s.cbWrap(cb))
 }
 
 // DescendStarting calls provided callback function from item equal to at until start or iterator function returns false
 func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.DescendRange, &wrap{storer: s, item: at}, nil, cbWrap(cb))
+	traverse(s.backing.DescendRange, &wrap{storer: s, item: at}, nil, s.cbWrap(cb))
 }
 
 // ExpireInterval allows setting of a new auto-expire interval (after the current one ticks)
@@ -351,6 +359,7 @@ func (s *Store) Expire() int {
 			s.happens <- &happening{
 				event: Expiry,
 				old:   old.item,
+				stats: old.stats,
 			}
 		}
 	}
@@ -365,18 +374,20 @@ func (s *Store) PutAll(items []interface{}) error {
 
 	errs := 0
 	for _, item := range items {
-		old, err := s.add(item)
+		newWrap, oldWrap, err := s.add(item)
 
-		if old == nil {
+		if oldWrap == nil {
 			s.happens <- &happening{
 				event: Insert,
 				new:   item,
+				stats: newWrap.stats,
 			}
-		} else if old != none {
+		} else if oldWrap != none {
 			s.happens <- &happening{
 				event: Update,
-				old:   old.item,
+				old:   oldWrap.item,
 				new:   item,
+				stats: newWrap.stats,
 			}
 		}
 
@@ -396,22 +407,24 @@ func (s *Store) Put(item interface{}) (interface{}, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	old, err := s.add(item)
+	newWrap, oldWrap, err := s.add(item)
 
-	if old == nil {
+	if oldWrap == nil {
 		s.happens <- &happening{
 			event: Insert,
 			new:   item,
+			stats: newWrap.stats,
 		}
-	} else if old != none {
+	} else if oldWrap != none {
 		s.happens <- &happening{
 			event: Update,
-			old:   old.item,
+			old:   oldWrap.item,
 			new:   item,
+			stats: newWrap.stats,
 		}
 	}
 
-	return old, err
+	return oldWrap, err
 }
 
 // Delete removes an item equal to the search item
@@ -424,6 +437,7 @@ func (s *Store) Delete(search interface{}) (interface{}, error) {
 		s.happens <- &happening{
 			event: Remove,
 			old:   old.item,
+			stats: old.stats,
 		}
 	}
 	return old, err
@@ -486,6 +500,8 @@ func (s *Store) On(event Event, notify NotifyFunc) {
 		s.removeNotifiers = append(s.removeNotifiers, notify)
 	case Expiry:
 		s.expiryNotifiers = append(s.expiryNotifiers, notify)
+	case Access:
+		s.accessNotifiers = append(s.accessNotifiers, notify)
 	default:
 		return
 	}
@@ -510,7 +526,7 @@ func (s *Store) findExpired() []*wrap {
 	return rm
 }
 
-func (s *Store) emit(event Event, old, new interface{}) {
+func (s *Store) emit(event Event, old, new interface{}, stats Stats) {
 	var handlers []NotifyFunc
 	switch event {
 	case Insert:
@@ -521,18 +537,20 @@ func (s *Store) emit(event Event, old, new interface{}) {
 		handlers = s.removeNotifiers
 	case Expiry:
 		handlers = s.expiryNotifiers
+	case Access:
+		handlers = s.accessNotifiers
 	default:
 		return
 	}
 
 	if len(handlers) > 0 {
 		for _, handler := range handlers {
-			handler(event, old, new)
+			handler(event, old, new, stats)
 		}
 	}
 }
 
-func (s *Store) add(item interface{}) (*wrap, error) {
+func (s *Store) add(item interface{}) (*wrap, *wrap, error) {
 	w := s.wrapIt(item)
 	ret := s.addWrap(w)
 
@@ -541,7 +559,7 @@ func (s *Store) add(item interface{}) (*wrap, error) {
 		err = s.persister.Save(string(w.UID()), item)
 	}
 
-	return ret, err
+	return w, ret, err
 }
 
 func (s *Store) addWrap(w *wrap) *wrap {
@@ -598,6 +616,7 @@ func (s *Store) addToIndex(indexID string, key string, wrapped *wrap) (emitted b
 					event: Update,
 					old:   rm.item,
 					new:   wrapped.item,
+					stats: wrapped.stats,
 				}
 				emitted = true
 			}
@@ -698,12 +717,18 @@ func (s *Store) wrapIt(item interface{}) *wrap {
 	return w
 }
 
-func cbWrap(cb interface{}) btree.ItemIterator {
+func (s *Store) cbWrap(cb interface{}) btree.ItemIterator {
 	now := time.Now()
 	return func(i btree.Item) bool {
 		if w, ok := i.(*wrap); ok {
 			w.stats.read(now)
 			if iterator, ok := cb.(Iterator); ok {
+				s.happens <- &happening{
+					event: Access,
+					old:   w.item,
+					new:   w.item,
+					stats: w.stats,
+				}
 				return iterator(w.item)
 			} else if info, ok := cb.(InfoIterator); ok {
 				return info(w.uid, w.item, w.stats)

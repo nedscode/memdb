@@ -45,6 +45,11 @@ func (s *Stats) set(from Stats) {
 	s.Writes = from.Writes
 }
 
+// IsZero returns whether the statistic has an item or not
+func (s *Stats) IsZero() bool {
+	return s.w == nil
+}
+
 type wrap struct {
 	sync.Mutex
 	storer Storer

@@ -1,8 +1,9 @@
 package memdb
 
 import (
-	"github.com/nedscode/memdb/persist"
 	"time"
+
+	"github.com/nedscode/memdb/persist"
 )
 
 // Storer provides the functionality of a memdb store.

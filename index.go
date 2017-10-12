@@ -62,6 +62,13 @@ func (idx *Index) Each(cb Iterator, keys ...string) {
 	now := time.Now()
 	for _, wrapped := range values {
 		wrapped.stats.read(now)
+		idx.store.happens <- &happening{
+			event: Access,
+			old:   wrapped.item,
+			new:   wrapped.item,
+			stats: wrapped.stats,
+		}
+
 		if !cb(wrapped.item) {
 			return
 		}
@@ -82,6 +89,12 @@ func (idx *Index) One(keys ...string) interface{} {
 	if len(values) > 0 {
 		wrapped := values[0]
 		wrapped.stats.read(now)
+		idx.store.happens <- &happening{
+			event: Access,
+			old:   wrapped.item,
+			new:   wrapped.item,
+			stats: wrapped.stats,
+		}
 		return wrapped.item
 	}
 	return nil
@@ -107,8 +120,35 @@ func (idx *Index) Lookup(keys ...string) []interface{} {
 	for i, wrapped := range values {
 		c[i] = wrapped.item
 		wrapped.stats.read(now)
+		idx.store.happens <- &happening{
+			event: Access,
+			old:   wrapped.item,
+			new:   wrapped.item,
+			stats: wrapped.stats,
+		}
 	}
 	return c
+}
+
+// Stats returns the stats for all items in the index without modifying access time
+func (idx *Index) Stats(keys ...string) []Stats {
+	if idx == nil {
+		return nil
+	}
+
+	idx.store.RLock()
+	defer idx.store.RUnlock()
+
+	values := idx.find(keys)
+	n := len(values)
+	if n > 0 {
+		c := make([]Stats, n)
+		for i, wrapped := range values {
+			c[i] = wrapped.stats
+		}
+		return c
+	}
+	return nil
 }
 
 // All returns the all items from the index

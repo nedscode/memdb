@@ -4,6 +4,7 @@ type happening struct {
 	event Event
 	old   interface{}
 	new   interface{}
+	stats Stats
 }
 
 // Event is a type of event emitted by the class, see the On() method
@@ -20,6 +21,8 @@ func (e Event) String() string {
 		return "Remove event"
 	case Expiry:
 		return "Expiry event"
+	case Access:
+		return "Access event"
 	default:
 		break
 	}
@@ -38,7 +41,10 @@ const (
 
 	// Expiry Events happen when items are removed due to being expired
 	Expiry
+
+	// Access Events happen when items are read
+	Access
 )
 
 // NotifyFunc is an event receiver that gets called when events happen
-type NotifyFunc func(event Event, old, new interface{})
+type NotifyFunc func(event Event, old, new interface{}, stats Stats)
