@@ -7,5 +7,6 @@ type IndexSearcher interface {
 	Lookup(keys ...string) []interface{}
 	All() []interface{}
 	FieldKey(a interface{}) FieldKey
+	Stats(keys ...string) []Stats
 	_id() string
 }
