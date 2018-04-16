@@ -402,12 +402,13 @@ func (s *Store) PutAll(items []interface{}) error {
 	return nil
 }
 
-// Put places an item into the store
-func (s *Store) Put(item interface{}) (interface{}, error) {
+// Put places an item into the store, returns the old replaced item (if any)
+func (s *Store) Put(item interface{}) (old interface{}, err error) {
 	s.Lock()
 	defer s.Unlock()
 
-	newWrap, oldWrap, err := s.add(item)
+	var newWrap, oldWrap *wrap
+	newWrap, oldWrap, err = s.add(item)
 
 	if oldWrap == nil {
 		s.happens <- &happening{
@@ -416,31 +417,33 @@ func (s *Store) Put(item interface{}) (interface{}, error) {
 			stats: newWrap.stats,
 		}
 	} else if oldWrap != none {
+		old = oldWrap.item
 		s.happens <- &happening{
 			event: Update,
-			old:   oldWrap.item,
+			old:   old,
 			new:   item,
 			stats: newWrap.stats,
 		}
 	}
-
-	return oldWrap, err
+	return
 }
 
-// Delete removes an item equal to the search item
-func (s *Store) Delete(search interface{}) (interface{}, error) {
+// Delete removes an item equal to the search item, returns the deleted item (if any)
+func (s *Store) Delete(search interface{}) (old interface{}, err error) {
 	s.Lock()
 	defer s.Unlock()
 
-	old, err := s.rm(search)
-	if old != nil {
+	var oldWrap *wrap
+	oldWrap, err = s.rm(search)
+	if oldWrap != nil {
+		old = oldWrap.item
 		s.happens <- &happening{
 			event: Remove,
-			old:   old.item,
-			stats: old.stats,
+			old:   old,
+			stats: oldWrap.stats,
 		}
 	}
-	return old, err
+	return
 }
 
 // Len returns the number of items in the database
