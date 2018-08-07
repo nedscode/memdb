@@ -27,13 +27,24 @@ func (ae *ageExpirer) IsExpired(a interface{}, now time.Time, stats Stats) bool 
 			return v == ExpireTrue
 		}
 	}
-	if ae.cTime != 0 && now.Sub(stats.Created) > ae.cTime {
+
+	cTime := stats.Created
+	mTime := stats.Modified
+	if mTime.IsZero() {
+		mTime = cTime
+	}
+	aTime := stats.Accessed
+	if aTime.IsZero() {
+		aTime = mTime
+	}
+
+	if ae.cTime != 0 && now.Sub(cTime) > ae.cTime {
 		return true
 	}
-	if ae.aTime != 0 && now.Sub(stats.Accessed) > ae.aTime {
+	if ae.aTime != 0 && now.Sub(aTime) > ae.aTime {
 		return true
 	}
-	if ae.mTime != 0 && now.Sub(stats.Modified) > ae.mTime {
+	if ae.mTime != 0 && now.Sub(mTime) > ae.mTime {
 		return true
 	}
 	return false

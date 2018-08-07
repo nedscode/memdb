@@ -22,16 +22,27 @@ func AgeExpirerRequireAll(cTime, mTime, aTime time.Duration, cb ...ExpireFunc) E
 
 // IsExpired implements the necessary function for an Expirer
 func (ae *ageExpirerRequireAll) IsExpired(a interface{}, now time.Time, stats Stats) bool {
+	cTime := stats.Created
+	mTime := stats.Modified
+	if mTime.IsZero() {
+		mTime = cTime
+	}
+	aTime := stats.Accessed
+	if aTime.IsZero() {
+		aTime = mTime
+	}
+
 	expired := true
-	if ae.cTime != 0 && now.Sub(stats.Created) < ae.cTime {
+	if ae.cTime != 0 && now.Sub(cTime) < ae.cTime {
 		expired = false
 	}
-	if ae.aTime != 0 && now.Sub(stats.Accessed) < ae.aTime {
+	if ae.aTime != 0 && now.Sub(aTime) < ae.aTime {
 		expired = false
 	}
-	if ae.mTime != 0 && now.Sub(stats.Modified) < ae.mTime {
+	if ae.mTime != 0 && now.Sub(mTime) < ae.mTime {
 		expired = false
 	}
+
 	for _, cb := range ae.cb {
 		if v := cb(a, now, stats); v == ExpireFalse {
 			expired = false
