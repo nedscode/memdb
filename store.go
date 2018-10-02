@@ -76,7 +76,7 @@ func (s *Store) Init() {
 	go func() {
 		// Give initial callers time to call ExpireInterval before we start the first tick
 		time.Sleep(10 * time.Millisecond)
-		s.Rlock()
+		s.RLock()
 		defer s.RUnlock()
 
 		// If there's no ticker set, create a default one
