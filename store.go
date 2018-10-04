@@ -345,8 +345,8 @@ func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 
 // ExpireInterval allows setting of a new auto-expire interval (after the current one ticks)
 func (s *Store) ExpireInterval(interval time.Duration) {
-	s.RLock()
-	defer s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 	s.ticker = time.NewTicker(interval)
 }
 
