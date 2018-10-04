@@ -80,7 +80,9 @@ func (s *Store) Init() {
 		// If there's no ticker set, create a default one
 		if s.ticker == nil {
 			// About 2.6 times per minute, shouldn't hit the same time every minute
+			s.Lock()
 			s.ticker = time.NewTicker(23272 * time.Millisecond)
+			s.Unlock()
 		}
 
 		for range s.ticker.C {
@@ -343,6 +345,8 @@ func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 
 // ExpireInterval allows setting of a new auto-expire interval (after the current one ticks)
 func (s *Store) ExpireInterval(interval time.Duration) {
+	s.Lock()
+	defer s.Unlock()
 	s.ticker = time.NewTicker(interval)
 }
 
