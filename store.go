@@ -78,12 +78,12 @@ func (s *Store) Init() {
 		time.Sleep(10 * time.Millisecond)
 
 		// If there's no ticker set, create a default one
+		s.Lock()
 		if s.ticker == nil {
 			// About 2.6 times per minute, shouldn't hit the same time every minute
-			s.Lock()
 			s.ticker = time.NewTicker(23272 * time.Millisecond)
-			s.Unlock()
 		}
+		s.Unlock()
 
 		for range s.ticker.C {
 			s.Expire()
@@ -345,8 +345,12 @@ func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 
 // ExpireInterval allows setting of a new auto-expire interval (after the current one ticks)
 func (s *Store) ExpireInterval(interval time.Duration) {
+	fmt.Println("Setting interval to", interval)
 	s.Lock()
 	defer s.Unlock()
+	if s.ticker != nil {
+		s.ticker.Stop() // resource leak if you dont do this
+	}
 	s.ticker = time.NewTicker(interval)
 }
 
@@ -515,17 +519,18 @@ func (s *Store) On(event Event, notify NotifyFunc) {
 }
 
 func (s *Store) findExpired() []*wrap {
-	s.RLock()
-	defer s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 	now := time.Now()
 
 	var rm []*wrap
 	s.backing.Ascend(func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
-			// TODO - Possible lock contention here if this calls any store functions
+			w.Lock()
 			if s.IsExpired(w.item, now, w.stats) {
 				rm = append(rm, w)
 			}
+			w.Unlock()
 		}
 		return true
 	})
