@@ -357,11 +357,11 @@ func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 func (s *Store) ExpireInterval(interval time.Duration) {
 	s.Lock()
 	defer s.Unlock()
-	s.tickerReset <- true
 	if s.ticker != nil {
 		s.ticker.Stop() // resource leak if you dont do this ?
 	}
 	s.ticker = time.NewTicker(interval)
+	s.tickerReset <- true // do this last to signal the ranging goroucine, after the new ticker is created
 }
 
 // Expire finds all expiring items in the store and deletes them
