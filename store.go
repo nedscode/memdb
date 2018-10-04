@@ -93,7 +93,9 @@ func (s *Store) Init() {
 			case <-s.ticker.C:
 				s.Expire()
 			case <-s.tickerReset:
-				fmt.Println("OMF - tickerReset")
+				// a new ticker has been issued
+				// this 2nd channel prevents the read on the original ticker from
+				// spinning out for all eternity
 			}
 		}
 	}()
