@@ -44,7 +44,8 @@ type Store struct {
 	expiryNotifiers []NotifyFunc
 	accessNotifiers []NotifyFunc
 
-	ticker *time.Ticker
+	ticker      *time.Ticker
+	tickerReset chan bool
 }
 
 // NewStore returns an initialized store for you to use
@@ -73,6 +74,8 @@ func (s *Store) Init() {
 		}
 	}()
 
+	s.tickerReset = make(chan bool, 1)
+
 	go func() {
 		// Give initial callers time to call ExpireInterval before we start the first tick
 		time.Sleep(10 * time.Millisecond)
@@ -85,8 +88,13 @@ func (s *Store) Init() {
 		}
 		s.Unlock()
 
-		for range s.ticker.C {
-			s.Expire()
+		for {
+			select {
+			case <-s.ticker.C:
+				s.Expire()
+			case <-s.tickerReset:
+				fmt.Println("OMF - tickerReset")
+			}
 		}
 	}()
 }
@@ -347,8 +355,9 @@ func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 func (s *Store) ExpireInterval(interval time.Duration) {
 	s.Lock()
 	defer s.Unlock()
+	s.tickerReset <- true
 	if s.ticker != nil {
-		s.ticker.Stop() // resource leak if you dont do this
+		s.ticker.Stop() // resource leak if you dont do this ?
 	}
 	s.ticker = time.NewTicker(interval)
 }
