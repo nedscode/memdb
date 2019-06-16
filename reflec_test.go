@@ -14,6 +14,7 @@ type R struct {
 	Float64 float64
 	Float32 float32
 	Bool    bool
+	Map     map[string]map[int]string
 }
 
 func Test_reflective(t *testing.T) {
@@ -29,6 +30,11 @@ func Test_reflective(t *testing.T) {
 			Uint64:  5000,
 			Float64: 5000.0000001,
 			Bool:    true,
+		},
+		Map: map[string]map[int]string {
+			"AAA": map[int]string{
+				5: "Hello",
+			},
 		},
 		Str:     "Main",
 		Int64:   20,
@@ -50,8 +56,9 @@ func Test_reflective(t *testing.T) {
 	assertStr(t, r, "float64", "200.0000001")
 	assertStr(t, r, "float32", "9.999999717e-10")
 	assertStr(t, r, "bool", "false")
+   	assertStr(t, r, "map.aaa.5", "Hello")
 
-	assertStr(t, r, "struct", "{[] <nil> Values 500 5000 5000.0000001 0 true}")
+	assertStr(t, r, "struct", "{[] <nil> Values 500 5000 5000.0000001 0 true map[]}")
 }
 
 func assertStr(t *testing.T, i interface{}, key, expect string) {

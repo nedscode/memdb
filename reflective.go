@@ -60,6 +60,32 @@ func reflectiveStruct(search string, val reflect.Value, path []string) string {
 	return ""
 }
 
+func reflectiveMap(search string, val reflect.Value, path []string) string {
+	if search == "" {
+		if val.CanInterface() {
+			return fmt.Sprintf("%v", val.Interface())
+		}
+		return ""
+	}
+
+	val = reflect.Indirect(val)
+
+	items := val.MapKeys()
+	for _, key := range items {
+		elem := val.MapIndex(key)
+		nom := strings.ToLower(staticVal(key.Kind(), key))
+		if nom == search {
+			if elem.CanInterface() {
+				return reflective(elem.Interface(), path[1:])
+			} else if len(path) == 1 {
+				return staticVal(elem.Kind(), elem)
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
 func reflective(a interface{}, path []string) string {
 	search := ""
 	n := len(path)
@@ -89,6 +115,9 @@ func reflective(a interface{}, path []string) string {
 		fallthrough
 	case reflect.Array:
 		return reflectiveArray(search, val, path)
+
+	case reflect.Map:
+		return reflectiveMap(search, val, path)
 
 	default:
 		if search != "" {
