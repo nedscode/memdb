@@ -45,7 +45,7 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 		t.Skip("Skipping test in short mode.")
 	}
 
-	if !sim && (threadCount > 100 || parallelism > 100) {
+	if !sim && (threadCount > 1000 || parallelism > 100) {
 		t.Skip("Skipping test as -simulate was not specified.")
 	}
 
