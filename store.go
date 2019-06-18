@@ -126,7 +126,7 @@ func (s *Store) IsExpired(a interface{}, now time.Time, stats Stats) bool {
 		return s.expirer.IsExpired(a, now, stats)
 	}
 
-	if ai, ok := a.(Indexable); ok {
+	if ai, ok := a.(Expirable); ok {
 		return ai.IsExpired(now, stats)
 	}
 
