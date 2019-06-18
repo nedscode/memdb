@@ -194,12 +194,28 @@ Saving items into the store is simple:
 
 ## Retrieving an item
 
-In order to retrieve an item, supply an equivalent item as a search parameter, you only need to create enough fields in
-the search object to be deemed equivalent by your Less function:
+In order to retrieve an item, you can either search in an index
 
 ```golang
-    vehicle := mdb.Get(&car{Make: "Holden", Model: "Astra"}).(*car)
-    fmt.Printf("Vehicle RRP is $%d\n", vehicle.RRP)
+    found := mdb.InPrimaryKey().One("Holden", "Astra")
+    // OR
+    found := mdb.In("make", "model").One("Holden", "Astra")
+```
+
+OR supply an equivalent item as a search parameter to the `Get` method.
+You only need to create enough fields in the search object to be deemed equivalent by your Less function:
+
+```golang
+    found := mdb.Get(&car{Make: "Holden", Model: "Astra"})
+```
+
+Once you have performed the search, you can cast it as a car and use it.
+The cast will fail if the returned object is nil, or not a car.
+
+```golang
+    if vehicle, ok := found.(*car); ok {
+        fmt.Printf("Vehicle RRP is $%d\n", vehicle.RRP)
+    }
 ```
 
 ## Looking up items by indexed field
