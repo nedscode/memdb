@@ -2,8 +2,6 @@
 package memdb
 
 import (
-	"sync/atomic"
-
 	"github.com/google/btree"
 	"github.com/nedscode/memdb/persist"
 
@@ -46,7 +44,7 @@ type Store struct {
 	expiryNotifiers []NotifyFunc
 	accessNotifiers []NotifyFunc
 
-	tickerDelay int64
+	ticker *time.Ticker
 }
 
 // NewStore returns an initialized store for you to use
@@ -77,10 +75,17 @@ func (s *Store) Init() {
 
 	go func() {
 		// Give initial callers time to call ExpireInterval before we start the first tick
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 
-		for {
-			time.Sleep(time.Duration(atomic.LoadInt64(&s.tickerDelay)))
+		// If there's no ticker set, create a default one
+		if s.ticker == nil {
+			// About 2.6 times per minute, shouldn't hit the same time every minute
+			s.Lock()
+			s.ticker = time.NewTicker(23272 * time.Millisecond)
+			s.Unlock()
+		}
+
+		for range s.ticker.C {
 			s.Expire()
 		}
 	}()
@@ -340,7 +345,9 @@ func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 
 // ExpireInterval allows setting of a new auto-expire interval (after the current one ticks)
 func (s *Store) ExpireInterval(interval time.Duration) {
-	atomic.StoreInt64(&s.tickerDelay, int64(interval))
+	s.Lock()
+	defer s.Unlock()
+	s.ticker = time.NewTicker(interval)
 }
 
 // Expire finds all expiring items in the store and deletes them
@@ -508,18 +515,17 @@ func (s *Store) On(event Event, notify NotifyFunc) {
 }
 
 func (s *Store) findExpired() []*wrap {
-	s.Lock()
-	defer s.Unlock()
+	s.RLock()
+	defer s.RUnlock()
 	now := time.Now()
 
 	var rm []*wrap
 	s.backing.Ascend(func(item btree.Item) bool {
 		if w, ok := item.(*wrap); ok {
-			w.Lock()
+			// TODO - Possible lock contention here if this calls any store functions
 			if s.IsExpired(w.item, now, w.stats) {
 				rm = append(rm, w)
 			}
-			w.Unlock()
 		}
 		return true
 	})
