@@ -59,8 +59,8 @@ To create a storage instance initialise it and set the indexed fields.
 Indexed fields can only be set at the start before data gets stored. Attempt to set index fields after first use will cause a panic.
 
 ```golang
-    mdb := memdb.NewStore()
-      .PrimaryKey("make", "model")
+    mdb := memdb.NewStore().
+        PrimaryKey("make", "model")
 ```
 
 ### Implementing Indexable. (alternative, older method)
@@ -134,10 +134,6 @@ panic.
     mdb := memdb.NewStore()
 ```
 
-```golang
-    mdb.PrimaryKey("make", "model")
-```
-
 ### Adding indexes
 
 You can add more ordinary indexes for the fields you want to search on.
@@ -158,7 +154,6 @@ You can also create compound indexes by supplying multiple fields:
 
 ### Unique indexes
 
-
 You can create unique indexes by appending a `Unique()` to the definition.
 
 Putting an item with the same value as a unique index will cause the previous item to be "Updated".
@@ -172,6 +167,19 @@ Putting an item with the same value as a unique index will cause the previous it
     }
 
     mdb.CreateIndex("vin").Unique()
+```
+
+### Chaining it all together
+
+All of the index creation can be chained together in the creation line, for example:
+
+```golang
+    mdb := memdb.NewStore().
+        PrimaryKey("make", "model").
+        CreateIndex("make").
+        CreateIndex("model").
+        CreateIndex("vin").Unique().
+        CreateIndex("make", "model", "rrp")
 ```
 
 ### Adding items to the store.
