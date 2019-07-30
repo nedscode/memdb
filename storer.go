@@ -39,6 +39,7 @@ type Storer interface {
 
 	Len() int
 	Indexes() [][]string
+	IndexStats(fields ...string) []*IndexStats
 	Keys(fields ...string) []string
 
 	On(event Event, notify NotifyFunc)
