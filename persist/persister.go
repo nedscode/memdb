@@ -18,3 +18,22 @@ type Persister interface {
 	// Remove is called when an indexer is expired or deleted and needs removal from persistent store
 	Remove(id string) error
 }
+
+// MetaLoadFunc is a function which will bulk-load the given indexer into the memdb instance at creation time
+type MetaLoadFunc func(id string, indexer interface{}, meta *Meta)
+
+// MetaPersister is an interface to allow persistent storage with additional metadata
+type MetaPersister interface {
+	Persister
+
+	// MetaSave is called to request persistent save of the indexer with id
+	MetaSave(id string, indexer interface{}) (meta *Meta, err error)
+
+	// MetaLoad is called at create time to load all of the persisted items and call loadFunc with each
+	MetaLoad(loadFunc MetaLoadFunc) error
+}
+
+// Meta contains metadata
+type Meta struct {
+	Size uint64
+}

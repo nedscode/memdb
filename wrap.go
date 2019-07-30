@@ -15,6 +15,7 @@ type Stats struct {
 	Modified time.Time
 	Reads    uint64
 	Writes   uint64
+	Size     uint64
 	w        *wrap
 }
 
@@ -43,6 +44,7 @@ func (s *Stats) set(from Stats) {
 	s.Modified = from.Modified
 	s.Reads = from.Reads
 	s.Writes = from.Writes
+	s.Size = from.Size
 }
 
 // IsZero returns whether the statistic has an item or not
@@ -52,6 +54,7 @@ func (s *Stats) IsZero() bool {
 
 type wrap struct {
 	sync.Mutex
+
 	storer Storer
 	uid    UID
 	item   interface{}

@@ -36,7 +36,7 @@ type Store struct {
 	expirer    Expirer
 	fielder    Fielder
 
-	persister persist.Persister
+	persister persist.MetaPersister
 
 	insertNotifiers []NotifyFunc
 	updateNotifiers []NotifyFunc
@@ -75,7 +75,7 @@ func (s *Store) Init() {
 
 	go func() {
 		// Give initial callers time to call ExpireInterval before we start the first tick
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		// If there's no ticker set, create a default one
 		if s.ticker == nil {
@@ -233,7 +233,7 @@ func (s *Store) Unique() *Store {
 
 // Persistent adds a persister to the database and loads up the existing records, call after all indexes are setup but
 // before you begin using it.
-func (s *Store) Persistent(persister persist.Persister) error {
+func (s *Store) Persistent(persister persist.MetaPersister) error {
 	if s.used {
 		panic("Cannot make persist on in-use store")
 	}
@@ -245,9 +245,10 @@ func (s *Store) Persistent(persister persist.Persister) error {
 	defer s.Unlock()
 
 	var loaderErr error
-	err := persister.Load(func(id string, item interface{}) {
+	err := persister.MetaLoad(func(id string, item interface{}, meta *persist.Meta) {
 		w := s.wrapIt(item)
 		w.uid = UID(id)
+		w.stats.Size = meta.Size
 		s.addWrap(w)
 	})
 
@@ -496,6 +497,47 @@ func (s *Store) Keys(fields ...string) []string {
 	return keys
 }
 
+type IndexStats struct {
+	Key   []string
+	Count uint64
+	Size  uint64
+}
+
+// IndexStats returns the list of distinct keys for an index along with stats of the items held.
+// The Size field represents stored (on disk) size of items, if using a persister, and will be 0 otherwise.
+func (s *Store) IndexStats(fields ...string) []*IndexStats {
+	f := s.In(fields...)
+	if f == nil {
+		return nil
+	}
+
+	s.RLock()
+	defer s.RUnlock()
+
+	index, ok := s.index[f._id()]
+	if !ok {
+		return nil
+	}
+
+	keys := make([]*IndexStats, len(index))
+	i := 0
+	for key, wraps := range index {
+		var size uint64
+		if s.persister != nil {
+			for _, wrap := range wraps {
+				size += wrap.stats.Size
+			}
+		}
+		keys[i] = &IndexStats{
+			Key: strings.Split(key, "\000"),
+			Count: uint64(len(wraps)),
+			Size: size,
+		}
+		i++
+	}
+	return keys
+}
+
 // On registers an event handler for an event type
 func (s *Store) On(event Event, notify NotifyFunc) {
 	switch event {
@@ -563,7 +605,9 @@ func (s *Store) add(item interface{}) (*wrap, *wrap, error) {
 
 	var err error
 	if s.persister != nil {
-		err = s.persister.Save(string(w.UID()), item)
+		var meta *persist.Meta
+		meta, err = s.persister.MetaSave(string(w.UID()), item)
+		w.stats.Size = meta.Size
 	}
 
 	return w, ret, err

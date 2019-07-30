@@ -19,7 +19,7 @@ type Storer interface {
 	Unique() *Store
 	Reversed(order ...bool) *Store
 
-	Persistent(persister persist.Persister) error
+	Persistent(persister persist.MetaPersister) error
 
 	Get(search interface{}) interface{}
 	Put(item interface{}) (interface{}, error)
