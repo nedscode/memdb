@@ -54,11 +54,18 @@ func (s *Storage) writeFile(name string, data []byte) error {
 
 // Save is an implementation of the Persister.Save method
 func (s *Storage) Save(id string, indexer interface{}) error {
+	_, err := s.MetaSave(id, indexer)
+	return err
+}
+
+// MetaSave is an implementation of the Persister.MetaSave method
+func (s *Storage) MetaSave(id string, indexer interface{}) (meta *persist.Meta, err error) {
 	data, err := json.Marshal(indexer)
 	if err != nil {
-		return fmt.Errorf("Indexer objects must be JSON marshallable to use FilePersist storage\n%#v\n", err)
+		return nil, fmt.Errorf("Indexer objects must be JSON marshallable to use FilePersist storage\n%#v\n", err)
 	}
 
+	size := uint64(len(data))
 	data, _ = json.Marshal(&container{
 		ID:   id,
 		Type: fmt.Sprintf("%T", indexer),
@@ -66,7 +73,12 @@ func (s *Storage) Save(id string, indexer interface{}) error {
 	})
 
 	name := path.Join(s.folder, id+".json")
-	return s.writeFile(name, data)
+	err = s.writeFile(name, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &persist.Meta{Size:size}, nil
 }
 
 func (s *Storage) readFile(name string) ([]byte, error) {
@@ -104,6 +116,13 @@ func (s *Storage) unmarshalItem(data []byte, item interface{}) error {
 
 // Load is an implementation of the Persister.Load method
 func (s *Storage) Load(loadFunc persist.LoadFunc) error {
+	return s.MetaLoad(func(id string, indexer interface{}, _ *persist.Meta) {
+		loadFunc(id, indexer)
+	})
+}
+
+// MetaLoad is an implementation of the Persister.MetaLoad method
+func (s *Storage) MetaLoad(loadFunc persist.MetaLoadFunc) error {
 	dir, err := ioutil.ReadDir(s.folder)
 	if err != nil {
 		return fmt.Errorf("Unable to read directory %s: %#v", s.folder, err)
@@ -134,7 +153,9 @@ func (s *Storage) Load(loadFunc persist.LoadFunc) error {
 			}
 
 			if err == nil {
-				loadFunc(c.ID, item)
+				loadFunc(c.ID, item, &persist.Meta{
+					Size: uint64(len(c.Item)),
+				})
 			}
 
 			if err != nil {

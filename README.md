@@ -2,7 +2,7 @@
 
 The memdb library is a simple, light-weight, in-memory store for go structs that allows indexing and storage of items as well as configurable item expiry and collection at an interface level.
 
-Persistance to disk is optionally available in the [persistfile](persist/file) package, should it be required, but has an overhead of having to encode/save the items when inserted/updated and to load the items at creation time.
+Persistence to disk is optionally available in the [persistfile](persist/file) package, should it be required, but has an overhead of having to encode/save the items when inserted/updated and to load the items at creation time.
 
 Importantly this memdb library only stores pointers to your original struct, so all benefits and caveats of this fact apply. For example, your original struct remains mutable which can be useful (see caveats below). There is a very low overhead for storing items above that of creating the original struct.
 
@@ -38,6 +38,41 @@ import "github.com/nedscode/memdb"
 
 ## Defining you storage struct
 
+There are 2 ways to use use memdb, the first (and recommended way) is to rely on automatic field detection to index your objects.
+
+### Relying on reflection.
+
+You can rely on reflection to implement your code more easily for most use-cases. This is now the recommended method of using memdb. See the next section "Implementing Indexable" for the manual way.
+
+Define your struct:
+
+```golang
+type car struct {
+    Make    string
+    Model   string
+    RRP     int
+}
+```
+
+To create a storage instance initialise it and set the indexed fields.
+
+Indexed fields can only be set at the start before data gets stored. Attempt to set index fields after first use will cause a panic.
+
+```golang
+    mdb := memdb.NewStore().
+        PrimaryKey("make", "model")
+```
+
+### Implementing Indexable. (alternative, older method)
+
+This is the older and manual way of implementing storage and indexing of an item.
+
+Before automatic field discovery was implemented, you needed to add extra methods to your objects so that the fields could be found and equality/sorting could be determined.
+ 
+We no longer recommend you use this method unless you really have to as it has extra implementation overheads and makes changes harder than simply adding new a field.
+
+This method may still be of use if you need to implement custom sorting/equality operations (perhaps using external lookup tables etc).
+
 Define your struct as normal:
 
 ```golang
@@ -48,7 +83,7 @@ type car struct {
 }
 ```
 
-Then add the required methods to support storage in memdb.
+Then add the required methods to support storage in memdb as an Indexable interfaced object.
 
 We need a comparator function `Less`. If `a.Less(b) == false && b.Less(a) == false`, then the item is determined to be
 equivalent and the same. Storage of multiple equivalent items will overwrite each other. If you can't figure out the
@@ -74,15 +109,6 @@ func (i *car) Less(other memdb.Indexer) bool {
 }
 ```
 
-Then we need an expiry function to determine if the item is to be expired or not, for the moment, we don't want any
-items to be expired, so set the function to return false.
-
-```golang
-func (i *car) IsExpired() bool {
-    return false
-}
-```
-
 Finally, we need a function that will return the string values of the indexed fields, all indexed fields are returned
 and stored as strings:
 
@@ -99,15 +125,21 @@ func (i *car) GetField(field string) string {
 }
 ```
 
-## Creating a storage instance
-
 To create a storage instance initialise it and set the indexed fields.
 
 Indexed fields can only be set at the start before data gets stored. Attempt to set index fields after use will cause a
 panic.
 
 ```golang
-    mdb := memdb.NewStore().
+    mdb := memdb.NewStore()
+```
+
+### Adding indexes
+
+You can add more ordinary indexes for the fields you want to search on.
+
+```golang
+    mdb.
         CreateIndex("make").
         CreateIndex("model")
 ```
@@ -117,12 +149,12 @@ panic.
 You can also create compound indexes by supplying multiple fields:
 
 ```golang
-    mdb.CreateIndex("make", "model")
+    mdb.CreateIndex("make", "model", "rrp")
 ```
 
-# Unique indexes
+### Unique indexes
 
-You can also create unique indexes by appending a `Unique()` to the definition.
+You can create unique indexes by appending a `Unique()` to the definition.
 
 Putting an item with the same value as a unique index will cause the previous item to be "Updated".
 
@@ -137,7 +169,20 @@ Putting an item with the same value as a unique index will cause the previous it
     mdb.CreateIndex("vin").Unique()
 ```
 
-## Adding items to the store.
+### Chaining it all together
+
+All of the index creation can be chained together in the creation line, for example:
+
+```golang
+    mdb := memdb.NewStore().
+        PrimaryKey("make", "model").
+        CreateIndex("make").
+        CreateIndex("model").
+        CreateIndex("vin").Unique().
+        CreateIndex("make", "model", "rrp")
+```
+
+### Adding items to the store.
 
 Saving items into the store is simple:
 
@@ -149,12 +194,28 @@ Saving items into the store is simple:
 
 ## Retrieving an item
 
-In order to retrieve an item, supply an eqivalent item as a search parameter, you only need to create enough fields in
-the search object to be deemed equivalent by your Less function:
+In order to retrieve an item, you can either search in an index
 
 ```golang
-    vehicle := mdb.Get(&car{Make: "Holden", Model: "Astra"}).(*car)
-    fmt.Printf("Vehicle RRP is $%d\n", vehicle.RRP)
+    found := mdb.InPrimaryKey().One("Holden", "Astra")
+    // OR
+    found := mdb.In("make", "model").One("Holden", "Astra")
+```
+
+OR supply an equivalent item as a search parameter to the `Get` method.
+You only need to create enough fields in the search object to be deemed equivalent by your Less function:
+
+```golang
+    found := mdb.Get(&car{Make: "Holden", Model: "Astra"})
+```
+
+Once you have performed the search, you can cast it as a car and use it.
+The cast will fail if the returned object is nil, or not a car.
+
+```golang
+    if vehicle, ok := found.(*car); ok {
+        fmt.Printf("Vehicle RRP is $%d\n", vehicle.RRP)
+    }
 ```
 
 ## Looking up items by indexed field
@@ -173,6 +234,38 @@ If you have compound fields, you can search them like:
 
 ```golang
     indexers := mdb.In("make", "model").Lookup("Holden", "Astra")
+```
+
+## Index pathing
+
+If you're using the simple method (with automatic fields), you can also index subfields with very little effort:
+
+```golang
+   type car struct {
+        Make    string
+        Model   string
+        Vin     string
+        Details map[string]string
+   }
+
+   mdb := memdb.NewStore()
+     .PrimaryKey("vin")
+     .Index("make", "model")
+     .Index("details.colour")
+     .Index("details.style")
+
+   mdb.Put(&car{
+       Make: "Honda",
+       Model: "Jazz",
+       VIN:   "abc123",
+       Details: map[string]string{
+           "color": "Metallic Blue",
+           "style": "Hatchback",
+       }
+   })
+
+   // Now you can find all the hatchbacks you have in stock.
+   indexers := mdb.In("details.style").Lookup("Hatchback")
 ```
 
 ## Traversing the database
@@ -299,4 +392,4 @@ func indexerFactory(indexerType string) interface{} {
 
 ## License
 
-© 2017, Neds International, code is released under GNU LGPL v3.0, see [LICENSE](LICENSE) file.
+© 2017-2019, Neds International, code is released under GNU LGPL v3.0, see [LICENSE](LICENSE) file.
