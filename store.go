@@ -527,7 +527,7 @@ func (s *Store) IndexStats(fields ...string) []*IndexStats {
 	i := 0
 	for key, wraps := range index {
 		var size uint64
-		if s.persister != nil {
+		if _, ok := s.persister.(persist.MetaPersister); ok {
 			for _, wrap := range wraps {
 				size += wrap.stats.Size
 			}
