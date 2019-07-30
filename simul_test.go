@@ -141,9 +141,9 @@ var (
 func simulatePutHandler(mdb *Store) {
 	a := getRand(aEls, 0.1)
 	x := &X{
-		a: a,
-		b: fmt.Sprintf("b%d", getRand(oEls)),
-		c: fmt.Sprintf("c%d", getRand(oEls)),
+		A: a,
+		B: fmt.Sprintf("b%d", getRand(oEls)),
+		C: fmt.Sprintf("c%d", getRand(oEls)),
 	}
 
 	mdb.Put(x)
@@ -151,7 +151,7 @@ func simulatePutHandler(mdb *Store) {
 		exists[a] = true
 	}
 
-	y := mdb.Get(&X{a: a})
+	y := mdb.Get(&X{A: a})
 
 	if y != x {
 		fmt.Printf("Put:\n%#v\nGot:\n%#v\n", x, y)
@@ -189,7 +189,7 @@ func getPotentialNumber(n int) int {
 func simulateDeleteHandler(mdb *Store) {
 	a := getPotentialNumber(aEls)
 
-	mdb.Delete(&X{a: a})
+	mdb.Delete(&X{A: a})
 }
 
 // Expires keys from the database.
@@ -202,7 +202,7 @@ func simulateExpiryHandler(mdb *Store) {
 // Retrieves a key from the database
 func simulateGetHandler(mdb *Store) {
 	a := getPotentialNumber(aEls)
-	mdb.Get(&X{a: a})
+	mdb.Get(&X{A: a})
 }
 
 // Retrieves a key from the database
@@ -257,8 +257,8 @@ func simulateWalkHandler(mdb *Store) {
 	} else if s == 1 {
 		mdb.Descend(ea)
 	} else if s == 2 {
-		mdb.AscendStarting(&X{a: a}, ea)
+		mdb.AscendStarting(&X{A: a}, ea)
 	} else if s == 3 {
-		mdb.DescendStarting(&X{a: a}, ea)
+		mdb.DescendStarting(&X{A: a}, ea)
 	}
 }

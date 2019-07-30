@@ -5,6 +5,7 @@ import (
 	"github.com/nedscode/memdb/persist"
 
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"sort"
@@ -17,37 +18,60 @@ import (
 var expired = 0
 
 type X struct {
-	a int
-	b string
-	c string
+	A int
+	B string
+	C string
 }
 
 // Storage is a mock memdb Persister that stores and loads from a map for testing purposes.
 type Storage struct {
 	sync.Mutex
-	Store map[string]interface{}
+	Store map[string][]byte
 }
 
 func NewMockStorage() *Storage {
 	return &Storage{
-		Store: map[string]interface{}{},
+		Store: map[string][]byte{},
 	}
 }
 
+
 // Save is an implementation of the Persister.Save method
-func (s *Storage) Save(id string, item interface{}) error {
+func (s *Storage) Save(id string, indexer interface{}) error {
+	_, err := s.MetaSave(id, indexer)
+	return err
+}
+
+// MetaSave is an implementation of the Persister.MetaSave method
+func (s *Storage) MetaSave(id string, indexer interface{}) (meta *persist.Meta, err error) {
 	s.Lock()
 	defer s.Unlock()
-	s.Store[id] = item
-	return nil
+	data, err := json.Marshal(indexer)
+	if err != nil {
+		return nil, err
+	}
+	s.Store[id] = data
+	return &persist.Meta{Size: uint64(len(data))}, nil
 }
 
 // Load is an implementation of the Persister.Load method
 func (s *Storage) Load(loadFunc persist.LoadFunc) error {
+	return s.MetaLoad(func(id string, indexer interface{}, _ *persist.Meta) {
+		loadFunc(id, indexer)
+	})
+}
+
+// MetaLoad is an implementation of the Persister.MetaLoad method
+func (s *Storage) MetaLoad(loadFunc persist.MetaLoadFunc) error {
 	s.Lock()
 	defer s.Unlock()
-	for id, item := range s.Store {
-		loadFunc(id, item)
+	for id, data := range s.Store {
+		item := &X{}
+		err := json.Unmarshal(data, item)
+		if err != nil {
+			return err
+		}
+		loadFunc(id, item, &persist.Meta{Size: uint64(len(data))})
 	}
 	return nil
 }
@@ -72,19 +96,19 @@ func init() {
 }
 
 func (x *X) Less(o interface{}) bool {
-	return x.a < o.(*X).a
+	return x.A < o.(*X).A
 }
 func (x *X) IsExpired(now time.Time, stats Stats) bool {
 	if expired < 0 {
 		return now.UnixNano()%1000000 > 995000
 	}
-	return x.a == expired
+	return x.A == expired
 }
 func (x *X) GetField(f string) string {
 	if f == "c" {
-		return x.c
+		return x.C
 	}
-	return x.b
+	return x.B
 }
 
 func TestCreateField(t *testing.T) {
@@ -128,13 +152,13 @@ func TestUniqueAfterStore(t *testing.T) {
 func TestPutAll(t *testing.T) {
 	s := NewStore()
 	items := []interface{}{
-		&X{a: 1},
-		&X{a: 2},
-		&X{a: 3},
-		&X{a: 4},
-		&X{a: 5},
-		&X{a: 6},
-		&X{a: 1},
+		&X{A: 1},
+		&X{A: 2},
+		&X{A: 3},
+		&X{A: 4},
+		&X{A: 5},
+		&X{A: 6},
+		&X{A: 1},
 	}
 	s.PutAll(items)
 
@@ -146,14 +170,14 @@ func TestPutAll(t *testing.T) {
 
 func TestGet(t *testing.T) {
 	s := NewStore()
-	orig := &X{a: 1}
+	orig := &X{A: 1}
 	s.Put(orig)
-	v := s.Get(&X{a: 1})
+	v := s.Get(&X{A: 1})
 	if v != orig {
 		t.Errorf("Gotten value should be same as original instance")
 	}
 
-	v = s.Get(&X{a: 2})
+	v = s.Get(&X{A: 2})
 	if v != nil {
 		t.Errorf("Gotten value should be nil (not present)")
 	}
@@ -162,21 +186,21 @@ func TestGet(t *testing.T) {
 func TestLookup(t *testing.T) {
 	s := NewStore()
 	s.CreateIndex("b")
-	s.Put(&X{a: 1, b: "test"})
-	s.Put(&X{a: 2, b: "test"})
-	s.Put(&X{a: 3, b: "not"})
+	s.Put(&X{A: 1, B: "test"})
+	s.Put(&X{A: 2, B: "test"})
+	s.Put(&X{A: 3, B: "not"})
 	vals := s.In("b").Lookup("test")
 	if len(vals) != 2 {
 		t.Errorf("Length of looked up values should be 2 (was %d)", len(vals))
 	}
 	a := vals[0].(*X)
 	b := vals[1].(*X)
-	if (a.a != 1 || b.a != 2) && (a.a != 2 || b.a != 1) {
+	if (a.A != 1 || b.A != 2) && (a.A != 2 || b.A != 1) {
 		t.Errorf("Expected to return 1 and 2 (got %#v)", vals)
 	}
 
 	val := s.In("b").One("test").(*X)
-	if val.a != 1 && val.a != 2 {
+	if val.A != 1 && val.A != 2 {
 		t.Errorf("Expected One to return 1 or 2 (got %#v)", val)
 	}
 }
@@ -184,7 +208,7 @@ func TestLookup(t *testing.T) {
 func TestLookupInvalidField(t *testing.T) {
 	s := NewStore()
 	s.CreateIndex("b")
-	s.Put(&X{a: 1, b: "test"})
+	s.Put(&X{A: 1, B: "test"})
 	vals := s.In("c").Lookup("test")
 	if vals != nil {
 		t.Errorf("Lookup of invalid field should be nil (was %#v)", vals)
@@ -204,16 +228,18 @@ func TestTraverse(t *testing.T) {
 	s.CreateIndex("c")
 	s.Persistent(p)
 
-	v1 := &X{a: 1, b: "one:", c: "ZZZ"}
-	v2 := &X{a: 2, b: "two:", c: "ZZZ"}
-	v3 := &X{a: 3, b: "three:", c: "ZZZ"}
-	v4 := &X{a: 4, b: "four:", c: "XXX"}
-	v8 := &X{a: 8, b: "eight:", c: "ZZZ"}
+	v1 := &X{A: 1, B: "one:", C: "ZZZ"}
+	v2 := &X{A: 2, B: "two:", C: "ZZZ"}
+	v3 := &X{A: 3, B: "three:", C: "ZZZ"}
+	v4 := &X{A: 4, B: "four:", C: "XXX"}
+	v8 := &X{A: 8, B: "eight:", C: "ZZZ"}
 
 	s.Put(v1)
 	s.Put(v2)
 	s.Put(v4)
 	s.Put(v8)
+
+	t.Log(p.Store)
 
 	n := s.Len()
 	if n != 4 {
@@ -240,7 +266,7 @@ func TestTraverse(t *testing.T) {
 	var stop *X
 
 	iter := func(i interface{}) bool {
-		got += i.(*X).b
+		got += i.(*X).B
 		return i != stop
 	}
 
@@ -309,10 +335,17 @@ func verifyPersistentStore(p *Storage, t *testing.T) {
 	foundEight := false
 	foundOther := false
 
-	for _, v := range p.Store {
-		if v.(*X).a == 1 {
+	for _, d := range p.Store {
+		v := &X{}
+		err := json.Unmarshal(d, v)
+		t.Logf("Data to json: %#v", v)
+		if err != nil {
+			t.Errorf("Error unmarshaling data: %v", err)
+		}
+
+		if v.A == 1 {
 			foundOne = true
-		} else if v.(*X).a == 8 {
+		} else if v.A == 8 {
 			foundEight = true
 		} else {
 			foundOther = true
@@ -320,7 +353,7 @@ func verifyPersistentStore(p *Storage, t *testing.T) {
 	}
 
 	if !foundOne || !foundEight || foundOther {
-		t.Errorf("Wrong items found in persistent store")
+		t.Errorf("Wrong items found in persistent store, %t %t %t", foundOne, foundEight, foundOther)
 	}
 }
 
@@ -400,11 +433,11 @@ func TestEach(t *testing.T) {
 	s.CreateIndex("b")
 	s.CreateIndex("c")
 
-	v1 := &X{a: 1, b: "one:", c: "ZZZ"}
-	v2 := &X{a: 2, b: "two:", c: "ZZZ"}
-	v3 := &X{a: 3, b: "three:", c: "ZZZ"}
-	v4 := &X{a: 4, b: "four:", c: "XXX"}
-	v8 := &X{a: 8, b: "eight:", c: "ZZZ"}
+	v1 := &X{A: 1, B: "one:", C: "ZZZ"}
+	v2 := &X{A: 2, B: "two:", C: "ZZZ"}
+	v3 := &X{A: 3, B: "three:", C: "ZZZ"}
+	v4 := &X{A: 4, B: "four:", C: "XXX"}
+	v8 := &X{A: 8, B: "eight:", C: "ZZZ"}
 
 	s.Put(v1)
 	s.Put(v2)
@@ -414,7 +447,7 @@ func TestEach(t *testing.T) {
 
 	total := 0
 	s.In("c").Each(func(i interface{}) bool {
-		total += i.(*X).a
+		total += i.(*X).A
 		return true
 	}, "ZZZ")
 
@@ -441,8 +474,8 @@ func notificateText(t *testing.T, s Storer, text, what string, expect Indexable)
 func TestNotificates(t *testing.T) {
 	s := NewStore()
 	s.CreateIndex("b")
-	v1 := &X{a: 1, b: "one:"}
-	v2 := &X{a: 1, b: "two:"}
+	v1 := &X{A: 1, B: "one:"}
+	v2 := &X{A: 1, B: "two:"}
 
 	var expectEvent Event
 	var expectOld, expectNew, expectOne, expectTwo Indexable
@@ -524,10 +557,10 @@ func TestNotificates(t *testing.T) {
 func TestCompound(t *testing.T) {
 	s := NewStore()
 	s.CreateIndex("b", "c")
-	v1a := &X{a: 1, b: "one", c: "xxx"}
-	v1b := &X{a: 2, b: "one", c: "zzz"}
-	v2a := &X{a: 3, b: "two", c: "xxx"}
-	v2b := &X{a: 4, b: "two", c: "zzz"}
+	v1a := &X{A: 1, B: "one", C: "xxx"}
+	v1b := &X{A: 2, B: "one", C: "zzz"}
+	v2a := &X{A: 3, B: "two", C: "xxx"}
+	v2b := &X{A: 4, B: "two", C: "zzz"}
 
 	s.Put(v1a)
 	s.Put(v1b)
@@ -538,7 +571,7 @@ func TestCompound(t *testing.T) {
 	if n := len(out); n != 1 {
 		t.Errorf("Expected exactly one response from compound lookup (got %d)", n)
 	}
-	if out[0].(*X).a != 2 {
+	if out[0].(*X).A != 2 {
 		t.Errorf("Expected a = 2 in compound result (got %#v)", out[0])
 	}
 }
@@ -547,10 +580,10 @@ func TestUnique(t *testing.T) {
 	s := NewStore()
 	s.CreateIndex("b")
 	s.CreateIndex("c").Unique()
-	v1a := &X{a: 1, b: "one", c: "a"}
-	v1b := &X{a: 2, b: "two", c: "a"}
-	v2 := &X{a: 3, b: "three", c: "b"}
-	v3 := &X{a: 4, b: "four", c: "c"}
+	v1a := &X{A: 1, B: "one", C: "a"}
+	v1b := &X{A: 2, B: "two", C: "a"}
+	v2 := &X{A: 3, B: "three", C: "b"}
+	v3 := &X{A: 4, B: "four", C: "c"}
 
 	var updated interface{}
 	var ctx context.Context
@@ -594,7 +627,7 @@ func TestUnsure(t *testing.T) {
 
 func TestLess(t *testing.T) {
 	s := NewStore()
-	v1 := &wrap{storer: s, item: &X{a: 1, b: "one:"}}
+	v1 := &wrap{storer: s, item: &X{A: 1, B: "one:"}}
 	vx := btree.Int(5)
 
 	if v1.Less(vx) {
