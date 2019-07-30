@@ -36,7 +36,7 @@ type Store struct {
 	expirer    Expirer
 	fielder    Fielder
 
-	persister persist.MetaPersister
+	persister persist.Persister
 
 	insertNotifiers []NotifyFunc
 	updateNotifiers []NotifyFunc
@@ -233,7 +233,7 @@ func (s *Store) Unique() *Store {
 
 // Persistent adds a persister to the database and loads up the existing records, call after all indexes are setup but
 // before you begin using it.
-func (s *Store) Persistent(persister persist.MetaPersister) error {
+func (s *Store) Persistent(persister persist.Persister) error {
 	if s.used {
 		panic("Cannot make persist on in-use store")
 	}
@@ -244,16 +244,20 @@ func (s *Store) Persistent(persister persist.MetaPersister) error {
 	s.Lock()
 	defer s.Unlock()
 
-	var loaderErr error
-	err := persister.MetaLoad(func(id string, item interface{}, meta *persist.Meta) {
-		w := s.wrapIt(item)
-		w.uid = UID(id)
-		w.stats.Size = meta.Size
-		s.addWrap(w)
-	})
-
-	if err == nil {
-		err = loaderErr
+	var err error
+	if metaPersister, ok := persister.(persist.MetaPersister); ok {
+		err = metaPersister.MetaLoad(func(id string, item interface{}, meta *persist.Meta) {
+			w := s.wrapIt(item)
+			w.uid = UID(id)
+			w.stats.Size = meta.Size
+			s.addWrap(w)
+		})
+	} else {
+		err = persister.Load(func(id string, item interface{}) {
+			w := s.wrapIt(item)
+			w.uid = UID(id)
+			s.addWrap(w)
+		})
 	}
 
 	return err
@@ -605,9 +609,14 @@ func (s *Store) add(item interface{}) (*wrap, *wrap, error) {
 
 	var err error
 	if s.persister != nil {
-		var meta *persist.Meta
-		meta, err = s.persister.MetaSave(string(w.UID()), item)
-		w.stats.Size = meta.Size
+		id := string(w.UID())
+		if metaPersister, ok := s.persister.(persist.MetaPersister); ok {
+			var meta *persist.Meta
+			meta, err = metaPersister.MetaSave(id, item)
+			w.stats.Size = meta.Size
+		} else {
+			err = s.persister.Save(id, item)
+		}
 	}
 
 	return w, ret, err
