@@ -53,7 +53,7 @@ func (s *Stats) IsZero() bool {
 }
 
 type wrap struct {
-	sync.Mutex
+	sync.RWMutex
 
 	storer Storer
 	uid    UID
