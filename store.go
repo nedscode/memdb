@@ -22,6 +22,8 @@ import (
 // comparator) without first removing the existing item. Such an act would leave the item stranded in an unknown
 // location within the index.
 type Store struct {
+	tickerDelay int64
+	
 	Storer
 	sync.RWMutex
 
@@ -46,7 +48,6 @@ type Store struct {
 	expiryNotifiers []NotifyFunc
 	accessNotifiers []NotifyFunc
 
-	tickerDelay int64
 }
 
 // NewStore returns an initialized store for you to use
