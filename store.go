@@ -315,7 +315,8 @@ func (s *Store) In(fields ...string) IndexSearcher {
 func (s *Store) Info(cb InfoIterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.AscendRange, nil, nil, s.cbWrap(cb))
+
+	s.backing.Ascend(s.cbWrap(cb))
 }
 
 // Ascend calls provided callback function from start (lowest order) of items until end or iterator function returns
@@ -323,14 +324,16 @@ func (s *Store) Info(cb InfoIterator) {
 func (s *Store) Ascend(cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.AscendRange, nil, nil, s.cbWrap(cb))
+
+	s.backing.Ascend(s.cbWrap(cb))
 }
 
 // AscendStarting calls provided callback function from item equal to at until end or iterator function returns false
 func (s *Store) AscendStarting(at interface{}, cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.AscendRange, &wrap{storer: s, item: at}, nil, s.cbWrap(cb))
+
+	s.backing.AscendGreaterOrEqual(&wrap{storer: s, item: at}, s.cbWrap(cb))
 }
 
 // Descend calls provided callback function from end (highest order) of items until start or iterator function returns
@@ -338,14 +341,16 @@ func (s *Store) AscendStarting(at interface{}, cb Iterator) {
 func (s *Store) Descend(cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.DescendRange, nil, nil, s.cbWrap(cb))
+
+	s.backing.Descend(s.cbWrap(cb))
 }
 
 // DescendStarting calls provided callback function from item equal to at until start or iterator function returns false
 func (s *Store) DescendStarting(at interface{}, cb Iterator) {
 	s.RLock()
 	defer s.RUnlock()
-	traverse(s.backing.DescendRange, &wrap{storer: s, item: at}, nil, s.cbWrap(cb))
+
+	s.backing.DescendLessOrEqual(&wrap{storer: s, item: at}, s.cbWrap(cb))
 }
 
 // ExpireInterval allows setting of a new auto-expire interval (after the current one ticks)
@@ -796,8 +801,4 @@ func (s *Store) cbWrap(cb interface{}) btree.ItemIterator {
 		}
 		return true
 	}
-}
-
-func traverse(traverse func(btree.Item, btree.Item, btree.ItemIterator), a, b btree.Item, iterator btree.ItemIterator) {
-	traverse(a, b, iterator)
 }
